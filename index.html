@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR 項目查詢系統</title>
+    <!-- 引入 html5-qrcode 函式庫 (CDN) -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Tailwind CSS 用於快速佈局 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        #reader {
+            border: none !important;
+        }
+        #reader video {
+            border-radius: 1rem;
+            object-fit: cover;
+        }
+        /* 掃描框動畫 */
+        .scan-region-highlight {
+            border-radius: 1rem !important;
+            outline: 2px solid #3b82f6 !important;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center p-4">
+
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl p-6 space-y-6">
+        <header class="text-center">
+            <h1 class="text-2xl font-bold text-slate-800">項目識別系統</h1>
+            <p class="text-slate-500 text-sm">請掃描 QR Code 或輸入項目 ID</p>
+        </header>
+
+        <!-- 安全連線警告 (實戰建議 3) -->
+        <div id="https-warning" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-3 text-xs mb-4">
+            ⚠️ 偵測到非加密連線。相機功能在非 HTTPS 環境下（除了 localhost）通常無法運作。
+        </div>
+
+        <!-- 掃描區域 -->
+        <div class="relative overflow-hidden rounded-xl bg-slate-100 aspect-square flex items-center justify-center border-2 border-dashed border-slate-300">
+            <div id="reader" class="w-full h-full"></div>
+            <div id="placeholder-ui" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="text-slate-500 font-medium">相機已準備就緒</span>
+            </div>
+        </div>
+
+        <!-- 操作按鈕 -->
+        <div class="grid grid-cols-1 gap-3">
+            <button id="start-btn" onclick="startScanning()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-200">
+                開啟相機掃描
+            </button>
+            <button id="stop-btn" onclick="stopScanning()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition-all">
+                停止掃描
+            </button>
+        </div>
+
+        <!-- 手動輸入備案 (實戰建議 2) -->
+        <div class="border-t pt-4">
+            <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">手動輸入 ID</label>
+            <div class="flex space-x-2">
+                <input type="text" id="manual-id" placeholder="例如: ITEM_001" class="flex-1 border border-slate-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                <button onclick="handleManualInput()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm">查詢</button>
+            </div>
+        </div>
+
+        <!-- 結果顯示區域 -->
+        <div id="result-card" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0 bg-green-500 rounded-full p-1 text-white">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-bold text-green-900">成功識別項目</h3>
+                        <div id="item-details" class="mt-2 text-sm text-green-800 space-y-1">
+                            <!-- 內容由 JS 填充 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 錯誤提示 -->
+        <div id="error-msg" class="hidden text-center text-red-500 text-sm font-medium"></div>
+    </div>
+
+    <script>
+        // 模擬 Mapping Table (實戰建議: 預設 JSON)
+        const mappingTable = {
+            "ITEM_001": { name: "高級辦公椅", price: "$4,500", stock: 12, loc: "倉庫 A" },
+            "ITEM_002": { name: "人體工學鍵盤", price: "$2,800", stock: 5, loc: "倉庫 B" },
+            "ITEM_003": { name: "4K 螢幕", price: "$12,000", stock: 3, loc: "展示區" },
+            "123": { name: "測試項目 (123)", price: "$99", stock: 99, loc: "測試中心" }
+        };
+
+        let html5QrCode;
+        const resultCard = document.getElementById('result-card');
+        const itemDetails = document.getElementById('item-details');
+        const errorMsg = document.getElementById('error-msg');
+
+        // 頁面初始化
+        window.addEventListener('load', () => {
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                document.getElementById('https-warning').classList.remove('hidden');
+            }
+            html5QrCode = new Html5Qrcode("reader");
+        });
+
+        // 啟動掃描
+        async function startScanning() {
+            clearResults();
+            document.getElementById('placeholder-ui').classList.add('hidden');
+            document.getElementById('start-btn').classList.add('hidden');
+            document.getElementById('stop-btn').classList.remove('hidden');
+
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0 
+            };
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    onScanSuccess
+                );
+            } catch (err) {
+                // 實戰建議 2: 處理權限拒絕或硬體失敗
+                showError("無法存取相機。請確認已授權權限，或嘗試手動輸入 ID。");
+                stopScanning();
+            }
+        }
+
+        // 停止掃描
+        async function stopScanning() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                await html5QrCode.stop();
+            }
+            document.getElementById('placeholder-ui').classList.remove('hidden');
+            document.getElementById('start-btn').classList.remove('hidden');
+            document.getElementById('stop-btn').classList.add('hidden');
+        }
+
+        // 掃描成功回調
+        function onScanSuccess(decodedText) {
+            // 實戰建議 1: 內容格式化處理 (提取 ID)
+            // 假設 ID 格式為純字串，或是 URL 最後一段 (例如 .../item/ITEM_001)
+            let itemId = decodedText.trim();
+            
+            // 如果是 URL，提取最後一部分
+            if (itemId.startsWith('http')) {
+                try {
+                    const url = new URL(itemId);
+                    const pathParts = url.pathname.split('/');
+                    itemId = pathParts[pathParts.length - 1] || itemId;
+                } catch (e) {
+                    console.error("URL 解析失敗");
+                }
+            }
+
+            processItemId(itemId);
+            stopScanning(); // 掃描到一個就停止，避免畫面閃爍
+        }
+
+        // 手動輸入處理
+        function handleManualInput() {
+            const val = document.getElementById('manual-id').value.trim();
+            if (val) {
+                processItemId(val);
+            }
+        }
+
+        // 核心 Mapping 邏輯
+        function processItemId(id) {
+            clearResults();
+            const item = mappingTable[id];
+
+            if (item) {
+                resultCard.classList.remove('hidden');
+                itemDetails.innerHTML = `
+                    <p><strong>ID:</strong> ${id}</p>
+                    <p><strong>品名:</strong> ${item.name}</p>
+                    <p><strong>價格:</strong> ${item.price}</p>
+                    <p><strong>庫存:</strong> ${item.stock}</p>
+                    <p><strong>位置:</strong> ${item.loc}</p>
+                `;
+                // 這裡可以進行後續操作，例如傳送到後端 API
+                // fetch('/api/log', { method: 'POST', body: JSON.stringify({ id }) });
+            } else {
+                showError(`查無此項目 ID: "${id}"`);
+            }
+        }
+
+        function showError(msg) {
+            errorMsg.innerText = msg;
+            errorMsg.classList.remove('hidden');
+        }
+
+        function clearResults() {
+            resultCard.classList.add('hidden');
+            errorMsg.classList.add('hidden');
+            itemDetails.innerHTML = '';
+        }
+    </script>
+</body>
+</html>
