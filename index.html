@@ -37,7 +37,7 @@
             <p class="font-bold text-yellow-700 mb-1 uppercase text-[9px]">Debug: Standardized String (Latin-1)</p>
             <div id="debug-raw-string" class="text-slate-600 break-all font-semibold bg-white p-1 border border-yellow-100 rounded mb-2">尚未掃描</div>
             <p class="font-bold text-blue-700 mb-1 uppercase text-[9px]">Hexadecimal (二進位原始碼)</p>
-            <div id="debug-hex-string" class="text-blue-500 break-all">待機中...</div>
+            <div id="debug-hex-string" class="text-blue-500 break-all bg-white p-1 border border-blue-100 rounded">待機中...</div>
         </div>
 
         <!-- 掃描區域 -->
@@ -114,7 +114,7 @@
             html5QrCode = new Html5Qrcode("reader");
         });
 
-        // 核心功能：將位元組轉換為 Latin-1 字串 (這會跟手機相機看到的結果一致)
+        // 核心功能：將位元組轉換為 Latin-1 字串
         function bytesToLatin1(bytes) {
             let latin1 = "";
             for (let i = 0; i < bytes.length; i++) {
@@ -123,9 +123,9 @@
             return latin1;
         }
 
-        // 輔助功能：轉為十六進位 (除錯最準)
+        // 輔助功能：轉為十六進位
         function bytesToHex(bytes) {
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
         }
 
         async function startScanning() {
@@ -157,13 +157,18 @@
 
         function onScanSuccess(decodedText, result) {
             let finalString = decodedText;
-            let hexString = "";
+            let hexString = "No raw bytes detected";
 
-            // 1. 攔截原始位元組並統一轉碼為 Latin-1
-            if (result && result.result && result.result.rawBytes) {
-                const rawBytes = result.result.rawBytes;
+            // 強制從 result 物件的多個可能路徑提取 rawBytes
+            const rawBytes = result?.result?.rawBytes || result?.rawBytes;
+
+            if (rawBytes && rawBytes.length > 0) {
                 finalString = bytesToLatin1(rawBytes);
                 hexString = bytesToHex(rawBytes);
+            } else {
+                // 如果抓不到 rawBytes，嘗試將 decodedText 轉回位元組再顯示 Hex (防呆)
+                const encoder = new TextEncoder();
+                hexString = bytesToHex(encoder.encode(decodedText)) + " (Encoded from Text)";
             }
 
             // 更新介面除錯資訊
@@ -173,14 +178,15 @@
             // 2. 完整字串全面精確比對
             const foundKey = Object.keys(mappingTable).find(key => {
                 const targetId = mappingTable[key].secondary_id;
-                return finalString === targetId; // 改為全面比對
+                return finalString === targetId;
             });
 
             if (foundKey) {
                 lookupPokemon(foundKey);
                 stopScanning();
             } else {
-                showError("掃描內容不完全符合對應表。");
+                // 如果比對失敗，在錯誤訊息顯示長度差異方便除錯
+                showError(`不符合。掃描長度: ${finalString.length}, 目標長度: ${Object.values(mappingTable)[0].secondary_id.length}`);
             }
         }
 
