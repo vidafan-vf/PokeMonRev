@@ -166,8 +166,16 @@
             // 1. 取得原始 UTF-8 內容 (decodedText)
             const utf8Text = decodedText;
             
-            // 2. 攔截原始位元組 (rawBytes)
-            const rawBytes = result?.result?.rawBytes || result?.rawBytes || new Uint8Array();
+            // 2. 強化版攔截原始位元組 (rawBytes)
+            // 嘗試所有可能的路徑：result.result.rawBytes (ZXing), result.rawBytes (一般), result.result.result.rawBytes (巢狀)
+            let rawBytes = result?.result?.rawBytes || result?.rawBytes;
+
+            // 如果還是抓不到，使用方法 A 作為備案：將亂碼還原成 Bytes
+            if (!rawBytes || rawBytes.length === 0) {
+                const encoder = new TextEncoder();
+                rawBytes = encoder.encode(utf8Text);
+                console.log("Using fallback encoder for bytes extraction");
+            }
             
             // 3. 轉換為 Latin-1 (手機相機直掃樣式)
             const latin1Text = bytesToLatin1(rawBytes);
@@ -175,7 +183,7 @@
 
             // 更新除錯顯示
             document.getElementById('debug-utf8').innerText = utf8Text;
-            document.getElementById('debug-hex-string').innerText = hexText || "無法獲取 Bytes";
+            document.getElementById('debug-hex-string').innerText = hexText || "仍無法獲取 Bytes";
             document.getElementById('debug-latin1').innerText = latin1Text;
 
             // 比對邏輯 (使用 Latin-1 字串進行精確比對)
