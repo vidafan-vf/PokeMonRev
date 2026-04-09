@@ -649,6 +649,8 @@ ${moves} ${api.moves.length > 10 ? '...' : ''}
             modal.classList.remove('hidden');
             modal.classList.add('flex');
             document.body.style.overflow = 'hidden'; // 禁止底層滾動
+            // 需求 1: 開啟跳窗時將捲軸移至頂端
+            if (scrollArea) scrollArea.scrollTop = 0;
         }
 
         function closeModal() {
