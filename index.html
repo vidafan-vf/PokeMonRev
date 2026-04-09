@@ -37,16 +37,19 @@
         </header>
 
         <!-- DEBUG 顯示區 -->
-        <div id="debug-panel" class="bg-yellow-50 border border-yellow-200 p-3 rounded-xl text-[10px] font-mono overflow-x-auto">
-            <p class="font-bold text-yellow-700 mb-1 uppercase text-[9px]">Debug: Standardized String (Latin-1)</p>
-            <div id="debug-raw-string" class="text-slate-600 break-all italic bg-white p-1 rounded border border-yellow-100 mb-1">尚未掃描內容</div>
-            <p class="font-bold text-blue-700 mb-1 uppercase text-[9px]">Hexadecimal</p>
-            <div id="debug-hex-string" class="text-blue-500 break-all">等待中...</div>
-        </div>
-
-        <!-- 安全連線警告 -->
-        <div id="https-warning" class="hidden bg-amber-50 border-l-4 border-amber-500 text-amber-700 p-3 text-xs">
-            ⚠️ 建議在 HTTPS 環境下執行以開啟相機功能。
+        <div id="debug-panel" class="bg-slate-900 text-green-400 p-4 rounded-xl text-[10px] font-mono space-y-3 overflow-x-auto shadow-inner border-2 border-slate-800">
+            <div>
+                <p class="text-slate-500 font-bold uppercase text-[9px] mb-1">1. 原始解碼 (UTF-8 亂碼)</p>
+                <div id="debug-utf8" class="bg-black/30 p-1.5 rounded border border-white/10 break-all text-yellow-200">尚未掃描</div>
+            </div>
+            <div>
+                <p class="text-slate-500 font-bold uppercase text-[9px] mb-1">2. 原始位元組 (Raw Bytes Hex)</p>
+                <div id="debug-hex-string" class="bg-black/30 p-1.5 rounded border border-white/10 break-all text-blue-300">尚未掃描</div>
+            </div>
+            <div>
+                <p class="text-slate-500 font-bold uppercase text-[9px] mb-1">3. 轉換後結果 (Latin-1 / 目標)</p>
+                <div id="debug-latin1" class="bg-black/30 p-1.5 rounded border border-white/10 break-all text-green-300 font-bold italic">尚未掃描</div>
+            </div>
         </div>
 
         <!-- 掃描區域 -->
@@ -72,7 +75,7 @@
         <div class="border-t border-slate-100 pt-4">
             <label class="block text-xs font-bold text-slate-400 uppercase mb-2">手動查詢 (中英文名稱)</label>
             <div class="flex gap-2">
-                <input type="text" id="manual-id" placeholder="例如: 皮卡丘 或 Pikachu" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-red-500 outline-none text-sm">
+                <input type="text" id="manual-id" placeholder="例如: 皮卡丘" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-red-500 outline-none text-sm">
                 <button onclick="handleManualInput()" class="bg-slate-800 text-white px-6 py-2 rounded-xl text-sm font-bold active:scale-95">查詢</button>
             </div>
         </div>
@@ -80,26 +83,20 @@
         <div id="error-msg" class="hidden text-center text-red-500 text-sm font-bold animate-pulse italic"></div>
     </div>
 
-    <!-- Markdown 結果跳窗 -->
+    <!-- 結果跳窗 -->
     <div id="result-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in duration-300">
+        <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
             <div class="bg-red-600 p-4 flex justify-between items-center text-white shrink-0">
-                <h2 class="font-bold text-lg flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                    詳細資訊
-                </h2>
-                <button onclick="closeModal()" class="bg-white/20 hover:bg-white/40 p-1 rounded-full transition-colors">
+                <h2 class="font-bold text-lg">詳細資訊</h2>
+                <button onclick="closeModal()" class="bg-white/20 p-1 rounded-full">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
             </div>
-            
             <div class="p-5 overflow-y-auto flex-1">
-                <div id="markdown-content" class="prose prose-slate max-w-none text-slate-700 text-sm leading-relaxed"></div>
-                <div class="mt-8 border-t border-slate-100 pt-4 text-center">
-                    <button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 rounded-2xl active:scale-95 transition-all text-sm">
-                        確認並回首頁
-                    </button>
-                </div>
+                <div id="markdown-content" class="prose prose-slate max-w-none text-slate-700 text-sm"></div>
+            </div>
+            <div class="p-4 bg-slate-50 border-t shrink-0">
+                <button onclick="closeModal()" class="w-full bg-slate-800 text-white font-bold py-3.5 rounded-2xl active:scale-95">關閉</button>
             </div>
         </div>
     </div>
@@ -107,21 +104,16 @@
     <script>
         // Mapping Table
         const mappingTable = {
-            "PKM-0001": { "C_name": "皮卡丘", "E_name": "pikachu", "memo": "編號 025 的電氣鼠", "secondary_id": "P025" },
-            "PKM-0005": { "C_name": "超級水箭龜", "E_name": "blastoise-mega", "memo": "水箭龜使用「超級石」進行超級進化後的形態", "secondary_id": "=áËN$¸3é\x91·$`<q\x13ÌPOKEMON01Ý" },
-            "PKM-0006": { "C_name": "密勒頓", "E_name": "miraidon", "memo": "屬於電屬性與龍屬性。", "secondary_id": "Ï\x87ý\x06\x95ä]:57I\x9F¿ÍNÐPOKEMON01Ý" }
+            "PKM-SAMPLE": { 
+                "C_name": "範例寶可夢", 
+                "E_name": "pikachu", 
+                "memo": "測試用", 
+                "secondary_id": "=áËN$¸3é\x91·$`<q\x13ÌPOKEMON01Ý" 
+            }
         };
 
-        const statTranslations = {
-            "hp": "體力 (HP)", "attack": "攻擊 (Attack)", "defense": "防禦 (Defense)",
-            "special-attack": "特攻 (Special Attack)", "special-defense": "特防 (Special Defense)", "speed": "速度 (Speed)"
-        };
-
-        const typeTranslations = {
-            "normal": "一般", "fire": "火", "water": "水", "grass": "草", "electric": "電", "ice": "冰",
-            "fighting": "格鬥", "poison": "毒", "ground": "地面", "flying": "飛行", "psychic": "超能力",
-            "bug": "蟲", "rock": "岩石", "ghost": "幽靈", "dragon": "龍", "dark": "惡", "steel": "鋼", "fairy": "妖精"
-        };
+        const statTranslations = { "hp": "體力", "attack": "攻擊", "defense": "防禦", "special-attack": "特攻", "special-defense": "特防", "speed": "速度" };
+        const typeTranslations = { "normal": "一般", "fire": "火", "water": "水", "grass": "草", "electric": "電", "ice": "冰", "fighting": "格鬥", "poison": "毒", "ground": "地面", "flying": "飛行", "psychic": "超能力", "bug": "蟲", "rock": "岩石", "ghost": "幽靈", "dragon": "龍", "dark": "惡", "steel": "鋼", "fairy": "妖精" };
 
         let html5QrCode;
         const modal = document.getElementById('result-modal');
@@ -129,22 +121,32 @@
         const errorMsg = document.getElementById('error-msg');
 
         window.addEventListener('load', () => {
-            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                document.getElementById('https-warning').classList.remove('hidden');
-            }
             html5QrCode = new Html5Qrcode("reader");
         });
+
+        // 核心功能：Bytes -> Latin-1
+        function bytesToLatin1(bytes) {
+            let latin1 = "";
+            for (let i = 0; i < bytes.length; i++) {
+                latin1 += String.fromCharCode(bytes[i]);
+            }
+            return latin1;
+        }
+
+        // 輔助功能：Bytes -> Hex
+        function bytesToHex(bytes) {
+            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+        }
 
         async function startScanning() {
             hideError();
             document.getElementById('placeholder-ui').classList.add('hidden');
             document.getElementById('start-btn').classList.add('hidden');
             document.getElementById('stop-btn').classList.remove('hidden');
-
             try {
                 await html5QrCode.start(
                     { facingMode: "environment" }, 
-                    { fps: 15, qrbox: { width: 250, height: 250 } }, 
+                    { fps: 20, qrbox: { width: 250, height: 250 } }, 
                     onScanSuccess
                 );
             } catch (err) {
@@ -154,72 +156,49 @@
         }
 
         async function stopScanning() {
-            if (html5QrCode && html5QrCode.isScanning) {
-                await html5QrCode.stop();
-            }
+            if (html5QrCode && html5QrCode.isScanning) await html5QrCode.stop();
             document.getElementById('placeholder-ui').classList.remove('hidden');
             document.getElementById('start-btn').classList.remove('hidden');
             document.getElementById('stop-btn').classList.add('hidden');
         }
 
-        // 輔助功能：轉為十六進位
-        function bytesToHex(bytes) {
-            return Array.from(bytes).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-        }
-
-        // 方法 B：核心轉碼邏輯 (Bytes -> Latin-1 String)
-        function bytesToLatin1(bytes) {
-            let latin1 = "";
-            for (let i = 0; i < bytes.length; i++) {
-                latin1 += String.fromCharCode(bytes[i]);
-            }
-            return latin1;
-        }
-
         function onScanSuccess(decodedText, result) {
-            let finalString = decodedText;
-            let hexString = "";
-
-            // 實作方法 B：攔截原始位元組
-            const rawBytes = result?.result?.rawBytes || result?.rawBytes;
-
-            if (rawBytes && rawBytes.length > 0) {
-                // 強制轉為 Latin-1 標準字串
-                finalString = bytesToLatin1(rawBytes);
-                hexString = bytesToHex(rawBytes);
-            }
+            // 1. 取得原始 UTF-8 內容 (decodedText)
+            const utf8Text = decodedText;
+            
+            // 2. 攔截原始位元組 (rawBytes)
+            const rawBytes = result?.result?.rawBytes || result?.rawBytes || new Uint8Array();
+            
+            // 3. 轉換為 Latin-1 (手機相機直掃樣式)
+            const latin1Text = bytesToLatin1(rawBytes);
+            const hexText = bytesToHex(rawBytes);
 
             // 更新除錯顯示
-            document.getElementById('debug-raw-string').innerText = finalString;
-            document.getElementById('debug-hex-string').innerText = hexString || "No Raw Bytes";
+            document.getElementById('debug-utf8').innerText = utf8Text;
+            document.getElementById('debug-hex-string').innerText = hexText || "無法獲取 Bytes";
+            document.getElementById('debug-latin1').innerText = latin1Text;
 
-            // 精確比對
+            // 比對邏輯 (使用 Latin-1 字串進行精確比對)
             const foundKey = Object.keys(mappingTable).find(key => 
-                mappingTable[key].secondary_id === finalString
+                mappingTable[key].secondary_id === latin1Text
             );
 
             if (foundKey) {
                 lookupPokemon(foundKey);
                 stopScanning();
             } else {
-                showError(`查無符合 ID (長度: ${finalString.length})`);
+                showError(`比對失敗。拉丁長度: ${latin1Text.length}`);
             }
         }
 
         function handleManualInput() {
             const inputVal = document.getElementById('manual-id').value.trim();
             if (!inputVal) return;
-
             const foundKey = Object.keys(mappingTable).find(key => 
-                mappingTable[key].C_name === inputVal || 
-                mappingTable[key].secondary_id === inputVal
+                mappingTable[key].C_name === inputVal || mappingTable[key].secondary_id === inputVal
             );
-
-            if (foundKey) {
-                lookupPokemon(foundKey);
-            } else {
-                showError(`找不到寶可夢: ${inputVal}`);
-            }
+            if (foundKey) lookupPokemon(foundKey);
+            else showError(`找不到: ${inputVal}`);
         }
 
         async function lookupPokemon(key) {
@@ -227,64 +206,25 @@
             const localData = mappingTable[key];
             try {
                 const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${localData.E_name.toLowerCase()}`);
-                if (!response.ok) throw new Error("API 請求失敗");
                 const apiData = await response.json();
                 generateMarkdown(localData, apiData);
                 openModal();
             } catch (err) {
-                showError(`連線失敗: ${err.message}`);
+                showError(`連線失敗`);
             }
         }
 
         function generateMarkdown(local, api) {
             const types = api.types.map(t => typeTranslations[t.type.name] || t.type.name).join(' / ');
-            const imageUrl = api.sprites.other['official-artwork'].front_default || api.sprites.front_default;
-            const cryAudioUrl = api.cries ? api.cries.latest : null;
-            const crySection = cryAudioUrl ? `### 🔊 叫聲 (Cries)\n<audio controls src="${cryAudioUrl}"></audio>` : "";
-
-            const md = `
-# ${local.C_name}
-(${local.E_name.toUpperCase()})
----
-![${local.C_name}](${imageUrl})
-
-### 📋 基本資訊
-- **卡片 ID**: \`${local.secondary_id}\`
-- **屬性**: ${types}
-- **身高**: ${api.height / 10} m
-- **體重**: ${api.weight / 10} kg
-
-### 📝 備註
-> ${local.memo}
-
-${crySection}
-
-### 📊 基礎數值
-${api.stats.map(s => `- **${statTranslations[s.stat.name] || s.stat.name}**: ${s.base_stat}`).join('\n')}
-            `;
+            const imageUrl = api.sprites.other['official-artwork'].front_default;
+            const md = `# ${local.C_name}\n---\n![${local.C_name}](${imageUrl})\n\n### 📋 基本資訊\n- **拉丁 ID**: \`${local.secondary_id}\`\n- **屬性**: ${types}\n- **身高**: ${api.height / 10} m\n- **體重**: ${api.weight / 10} kg\n\n### 📝 備註\n> ${local.memo}`;
             markdownDiv.innerHTML = marked.parse(md);
         }
 
-        function openModal() {
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeModal() {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            document.body.style.overflow = '';
-        }
-
-        function showError(msg) {
-            errorMsg.innerText = msg;
-            errorMsg.classList.remove('hidden');
-        }
-
-        function hideError() {
-            errorMsg.classList.add('hidden');
-        }
+        function openModal() { modal.classList.remove('hidden'); modal.classList.add('flex'); document.body.style.overflow = 'hidden'; }
+        function closeModal() { modal.classList.add('hidden'); modal.classList.remove('flex'); document.body.style.overflow = ''; }
+        function showError(msg) { errorMsg.innerText = msg; errorMsg.classList.remove('hidden'); }
+        function hideError() { errorMsg.classList.add('hidden'); }
     </script>
 </body>
 </html>
