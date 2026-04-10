@@ -1181,7 +1181,7 @@
             try {
                 await html5QrCode.start(
                     { facingMode: "environment" }, 
-                    { fps: 15, qrbox: { width: 250, height: 250 }, videoConstraints: { zoom: { ideal: 2.0 }, width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "environment"} }, 
+                    { fps: 15, qrbox: { width: 250, height: 250 }, videoConstraints: { zoom: { ideal: 2.0 }, facingMode: "environment"} }, 
                     onScanSuccess
                 );
             } catch (err) {
