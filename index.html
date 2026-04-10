@@ -68,7 +68,7 @@
         <div id="error-msg" class="hidden p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium border border-red-100"></div>
     </main>
 
-    <!-- 結果彈窗 (Full Screen Modal) -->
+    <!-- 結果彈窗 -->
     <div id="result-modal" class="hidden fixed inset-0 z-50 flex-col bg-white">
         <div class="flex items-center justify-between p-4 border-b">
             <h2 class="font-bold text-slate-800">卡片詳細資訊</h2>
@@ -101,11 +101,171 @@
         const scrollArea = document.getElementById('scroll-area');
 
         // 初始化
-        window.addEventListener('load', async () => {
+        window.addEventListener('load', () => {
             if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
                 document.getElementById('https-warning').classList.remove('hidden');
             }
-            
+            // 預先建立實例
             html5QrCode = new Html5Qrcode("reader");
             
-            // 嘗試在
+            // 手機端可能需要使用者互動後才能列出相機，先嘗試一次
+            setTimeout(detectCameras, 1000);
+        });
+
+        async function detectCameras() {
+            try {
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    cameraContainer.innerHTML = '';
+                    devices.forEach((camera, index) => {
+                        const btn = document.createElement('button');
+                        btn.innerText = camera.label || `指定鏡頭 ${index + 1}`;
+                        btn.className = "w-full bg-white text-slate-600 border border-slate-200 font-medium py-3 rounded-xl transition-all text-xs hover:bg-slate-50 active:scale-95";
+                        btn.onclick = () => startScanning(camera.id);
+                        cameraContainer.appendChild(btn);
+                    });
+                }
+            } catch (err) {
+                console.warn("無法獲取相機列表", err);
+            }
+        }
+
+        async function startScanning(cameraId = null) {
+            hideError();
+            
+            // 如果正在運作中先停止
+            if (html5QrCode && html5QrCode.getState() > 1) {
+                try { await html5QrCode.stop(); } catch(e) {}
+            }
+
+            document.getElementById('placeholder-ui').classList.add('hidden');
+            document.getElementById('start-btn').classList.add('hidden');
+            cameraContainer.classList.add('hidden');
+            document.getElementById('stop-btn').classList.remove('hidden');
+
+            const config = { 
+                fps: 15, 
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
+            };
+            
+            const cameraMode = cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" };
+
+            try {
+                await html5QrCode.start(cameraMode, config, onScanSuccess);
+                
+                // 啟動成功後，如果是手機端，再次嘗試更新相機標籤（此時權限已獲得）
+                detectCameras();
+
+                // 嘗試設定 2.0x 縮放
+                setTimeout(() => {
+                    try {
+                        const videoTrack = html5QrCode.getRunningTrack();
+                        if (videoTrack) {
+                            const capabilities = videoTrack.getCapabilities();
+                            if (capabilities.zoom) {
+                                // 設定為 2 倍，或該裝置支援的最大值
+                                const targetZoom = Math.min(2.0, capabilities.zoom.max || 2.0);
+                                videoTrack.applyConstraints({
+                                    advanced: [{ zoom: targetZoom }]
+                                }).catch(e => console.warn("縮放套用失敗"));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("此裝置不支援獲取軌道資訊");
+                    }
+                }, 1500);
+
+            } catch (err) {
+                showError("無法啟動相機，請檢查權限設定。");
+                stopScanning();
+            }
+        }
+
+        function stopScanning() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('start-btn').classList.remove('hidden');
+                    cameraContainer.classList.remove('hidden');
+                    document.getElementById('stop-btn').classList.add('hidden');
+                    document.getElementById('placeholder-ui').classList.remove('hidden');
+                }).catch(err => {
+                    // 若已經停止則忽略
+                    document.getElementById('start-btn').classList.remove('hidden');
+                    cameraContainer.classList.remove('hidden');
+                    document.getElementById('stop-btn').classList.add('hidden');
+                });
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            if (decodedText.startsWith('rev_pk_')) {
+                stopScanning();
+                fetchPokemonData(decodedText);
+            } else {
+                showError("非有效的 Pokemon Rev 遊戲代碼。");
+            }
+        }
+
+        async function fetchPokemonData(code) {
+            try {
+                const id = code.replace('rev_pk_', '');
+                const response = await fetch(`https://raw.githubusercontent.com/riddleling/pokedata/main/data/${id}.json`);
+                if (!response.ok) throw new Error('找不到卡片資料');
+                const data = await response.json();
+                
+                const apiRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${data.secondary_id}`);
+                const apiData = await apiRes.json();
+                
+                renderMarkdown(data, apiData);
+                openModal();
+            } catch (err) {
+                showError("抓取失敗：" + err.message);
+                stopScanning();
+            }
+        }
+
+        const statTranslations = {
+            'hp': '生命 (HP)',
+            'attack': '攻擊 (Atk)',
+            'defense': '防禦 (Def)',
+            'special-attack': '特攻 (Sp.Atk)',
+            'special-defense': '特防 (Sp.Def)',
+            'speed': '速度 (Spe)'
+        };
+
+        function renderMarkdown(local, api) {
+            const types = api.types.map(t => `\`${t.type.name.toUpperCase()}\``).join(' ');
+            const abilities = api.abilities.map(a => `- ${a.ability.name}`).join('\n');
+            const imageUrl = api.sprites.other['official-artwork'].front_default;
+            
+            const md = `
+# ${local.C_name} (${local.E_name.toUpperCase()})
+---
+![${local.C_name}](${imageUrl})
+
+### 📋 基本資訊
+- **卡片 ID**: \`${local.secondary_id}\`
+- **屬性**: ${types}
+- **身高**: ${api.height / 10} m
+- **體重**: ${api.weight / 10} kg
+
+### 📝 備註
+> ${local.memo}
+
+### 🌟 特性 (Abilities)
+${abilities}
+
+### 📊 基礎數值 (Stats)
+${api.stats.map(s => `- **${statTranslations[s.stat.name] || s.stat.name}**: ${s.base_stat}`).join('\n')}
+            `;
+
+            rawTextarea.value = md.trim();
+            markdownDiv.innerHTML = marked.parse(md);
+        }
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+            if (
