@@ -1175,7 +1175,7 @@
         async function startScanning() {
 Html5Qrcode.getCameras().then(devices => {
     if (devices && devices.length > 0) {
-        showError("偵測到的鏡頭清單：", devices);
+        showError(`偵測到的鏡頭清單： ${devices}`);
         
         // 策略：通常主鏡頭會是最後一個，或是你可以做個切換鈕讓使用者選
         // 先試試看清單中的最後一顆 (通常是後置主鏡頭)
@@ -1196,10 +1196,10 @@ Html5Qrcode.getCameras().then(devices => {
             }, 
             onScanSuccess
         ).catch(err => {
-            showError("啟動特定鏡頭失敗：", err);
+            showError(`啟動特定鏡頭失敗： ${err}`);
         });
     } else {
-        showError("找不到任何鏡頭");
+        showError(`找不到任何鏡頭`);
     }
 }).catch(err => {
     showError("無法取得鏡頭清單：", err);
