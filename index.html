@@ -1203,7 +1203,7 @@
 			        try {
 			            // 嘗試啟動選定的鏡頭
 			            await html5QrCode.start(selectedCameraId, config, onScanSuccess);
-						showError("嘗試啟動選定的鏡頭");
+						showError(`嘗試啟動選定的鏡頭: ${selectedCameraId}`);
 			        } catch (firstErr) {
 			            console.warn("第二個鏡頭啟動失敗，嘗試第一個鏡頭...", firstErr);
 						showError("第二個鏡頭啟動失敗，嘗試第一個鏡頭...");
