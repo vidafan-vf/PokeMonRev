@@ -4,1282 +4,194 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pokemon Rev!</title>
-    <!-- 引入 html5-qrcode 函式庫 -->
     <script src="https://unpkg.com/html5-qrcode"></script>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Marked.js 用於將 Markdown 轉為 HTML 顯示 -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         #reader { border: none !important; }
         #reader video { border-radius: 1rem; object-fit: cover; }
         .scan-region-highlight { border-radius: 1rem !important; outline: 2px solid #ef4444 !important; }
-        
-        /* Modal 樣式優化 */
         .prose img { margin: 0 auto; border-radius: 1rem; background: #f8fafc; padding: 1rem; border: 1px solid #e2e8f0; max-width: 100%; height: auto; }
         .prose h1 { color: #ef4444; border-bottom: 2px solid #fee2e2; padding-bottom: 0.5rem; font-size: 1.5rem; }
-        .prose h3 { color: #1e293b; margin-top: 1.25rem; margin-bottom: 0.5rem; border-left: 4px solid #ef4444; padding-left: 0.75rem; font-size: 1.1rem; }
-        .prose blockquote { border-left-color: #ef4444; background: #fff1f2; padding: 0.5rem 1rem; border-radius: 0 0.5rem 0.5rem 0; font-style: normal; }
-        .prose audio { width: 100%; height: 36px; margin-top: 0.5rem; }
-        .prose code { background: #f1f5f9; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-size: 0.875em; }
-        
-        /* 隱藏滾動條但保留功能 (可選) */
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col items-center p-4">
+<body class="bg-slate-50 min-h-screen pb-20">
 
-    <!-- 主容器 -->
-    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl p-6 space-y-6">
-        <header class="text-center">
-            <h1 class="text-3xl font-black text-red-600 tracking-tighter">POKÉMON REV!</h1>
-            <p class="text-slate-500 text-sm font-medium">掃描遊戲卡 QR Code 獲取寶可夢資訊</p>
-        </header>
-
-        <!-- DEBUG 顯示區 (除錯用，之後可移除) -->
-        <div id="debug-panel" class="bg-yellow-50 border border-yellow-200 p-3 rounded-xl text-[10px] font-mono overflow-x-auto">
-            <p class="font-bold text-yellow-700 mb-1 uppercase text-[9px]">Debug: Scanned String</p>
-            <div id="debug-raw-string" class="text-slate-600 break-all italic">尚未掃描內容</div>
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3 shadow-sm">
+        <div class="max-w-md mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-black text-slate-800 tracking-tight">POKÉMON <span class="text-red-600">REV!</span></h1>
+            <div id="https-warning" class="hidden text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-bold">非安全連線</div>
         </div>
+    </nav>
 
-        <!-- 安全連線警告 -->
-        <div id="https-warning" class="hidden bg-amber-50 border-l-4 border-amber-500 text-amber-700 p-3 text-xs">
-            ⚠️ 建議在 HTTPS 環境下執行以開啟相機功能。
-        </div>
-
-        <!-- 掃描區域 -->
-        <div class="relative overflow-hidden rounded-2xl bg-slate-900 aspect-square flex items-center justify-center">
-            <div id="reader" class="w-full h-full"></div>
-            <div id="placeholder-ui" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-800 pointer-events-none">
-                <div class="w-16 h-16 border-4 border-red-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                <span class="text-slate-400 text-sm">等待相機啟動...</span>
+    <main class="max-w-md mx-auto p-4 space-y-6">
+        <div class="relative bg-white p-2 rounded-3xl shadow-xl shadow-slate-200 overflow-hidden border border-slate-100">
+            <div id="reader" class="w-full aspect-square overflow-hidden rounded-2xl bg-slate-100"></div>
+            <div id="placeholder-ui" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div class="w-20 h-20 border-4 border-slate-200 border-dashed rounded-full animate-spin-slow mb-4"></div>
+                <p class="text-slate-400 font-medium">等待相機啟動...</p>
             </div>
         </div>
 
-        <!-- 操作按鈕 -->
-<div class="flex flex-col gap-3">
-    <button id="start-btn" onclick="startScanning()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-200 active:scale-95">
-        開始掃描遊戲卡
-    </button>
-
-    <div id="camera-selection-grp" class="flex flex-col gap-2"></div>
-
-    <button id="stop-btn" onclick="stopScanning()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl transition-all">
-        停止相機
-    </button>
-</div>
-
-        <!-- 手動輸入區域 -->
-        <div class="border-t border-slate-100 pt-4">
-            <label class="block text-xs font-bold text-slate-400 uppercase mb-2">手動查詢 (中英文名稱)</label>
-            <div class="flex gap-2">
-                <input type="text" id="manual-id" placeholder="例如: 皮卡丘 或 Pikachu" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-red-500 outline-none text-sm">
-                <button onclick="handleManualInput()" class="bg-slate-800 text-white px-6 py-2 rounded-xl text-sm font-bold active:scale-95">查詢</button>
-            </div>
-        </div>
-
-        <div id="error-msg" class="hidden text-center text-red-500 text-sm font-bold animate-pulse italic"></div>
-    </div>
-
-    <!-- Markdown 結果跳窗 (RWD 優化) -->
-    <div id="result-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
-        <!-- 寬度設為與主畫面一致的 max-w-md -->
-        <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in duration-300">
-            <!-- Modal Header -->
-            <div class="bg-red-600 p-4 flex justify-between items-center text-white shrink-0">
-                <h2 class="font-bold text-lg flex items-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                    詳細資訊
-                </h2>
-                <button onclick="closeModal()" class="bg-white/20 hover:bg-white/40 p-1 rounded-full transition-colors">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-            </div>
+        <div class="flex flex-col gap-3">
+            <button id="start-btn" onclick="startScanning()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-200 active:scale-95">
+                開始掃描遊戲卡 (自動)
+            </button>
             
-            <!-- Markdown 內容顯示區 -->
-            <div class="p-5 overflow-y-auto flex-1">
-                <div id="markdown-content" class="prose prose-slate max-w-none text-slate-700 text-sm leading-relaxed"></div>
-                
-                <div class="mt-8 border-t border-slate-100 pt-4">
-                    <details class="group">
-                        <summary class="list-none flex items-center justify-between cursor-pointer text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Markdown 源碼 (Debug)
-                            <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-                        </summary>
-                        <textarea id="raw-markdown" readonly class="mt-3 w-full h-32 bg-slate-50 border border-slate-200 rounded-lg p-3 text-[10px] font-mono text-slate-500 outline-none"></textarea>
-                    </details>
-                </div>
-            </div>
+            <div id="camera-selection-grp" class="flex flex-col gap-2"></div>
 
-            <!-- Modal Footer -->
-            <div class="p-4 bg-slate-50 border-t border-slate-100 shrink-0">
-                <button onclick="closeModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3.5 rounded-2xl active:scale-95 transition-all text-sm">
-                    確認並回首頁
-                </button>
+            <button id="stop-btn" onclick="stopScanning()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl transition-all">
+                停止相機
+            </button>
+        </div>
+
+        <div id="error-msg" class="hidden p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-medium border border-red-100"></div>
+    </main>
+
+    <div id="result-modal" class="hidden fixed inset-0 z-50 flex-col bg-white">
+        <div class="flex items-center justify-between p-4 border-b">
+            <h2 class="font-bold text-slate-800">卡片詳細資訊</h2>
+            <button onclick="closeModal()" class="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors">
+                <svg class="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div id="scroll-area" class="flex-1 overflow-y-auto p-4">
+            <div id="markdown-content" class="prose prose-slate max-w-none prose-img:shadow-md"></div>
+            <div class="mt-8 pt-8 border-t border-slate-100">
+                <details class="group">
+                    <summary class="list-none cursor-pointer flex items-center text-slate-400 text-sm font-medium">
+                        <span class="group-open:rotate-90 transition-transform mr-2">▶</span> 檢視原始 Markdown 資料
+                    </summary>
+                    <textarea id="raw-markdown" readonly class="mt-4 w-full h-48 p-4 bg-slate-50 rounded-xl text-xs font-mono text-slate-500 border border-slate-200 focus:outline-none"></textarea>
+                </details>
             </div>
         </div>
     </div>
 
     <script>
-        // 1. Mapping Table
-        const mappingTable = {
-			"PKM-0001": { "C_name": "妙蛙種子", "E_name": "Bulbasaur", "memo": "全國編號0001", "secondary_id": "0001" , "memo2": "" },
-			"PKM-0002": { "C_name": "妙蛙草", "E_name": "Ivysaur", "memo": "全國編號0002", "secondary_id": "0002" , "memo2": "" },
-			"PKM-0003": { "C_name": "妙蛙花", "E_name": "Venusaur", "memo": "全國編號0003", "secondary_id": "0003" , "memo2": "" },
-			"PKM-0004": { "C_name": "小火龍", "E_name": "Charmander", "memo": "全國編號0004", "secondary_id": "0004" , "memo2": "" },
-			"PKM-0005": { "C_name": "火恐龍", "E_name": "Charmeleon", "memo": "全國編號0005", "secondary_id": "0005" , "memo2": "" },
-			"PKM-0006": { "C_name": "噴火龍", "E_name": "Charizard", "memo": "全國編號0006", "secondary_id": "0006" , "memo2": "" },
-			"PKM-0007": { "C_name": "傑尼龜", "E_name": "Squirtle", "memo": "全國編號0007", "secondary_id": "0007" , "memo2": "" },
-			"PKM-0008": { "C_name": "卡咪龜", "E_name": "Wartortle", "memo": "全國編號0008", "secondary_id": "0008" , "memo2": "" },
-			"PKM-0009": { "C_name": "水箭龜", "E_name": "Blastoise", "memo": "全國編號0009", "secondary_id": "0009" , "memo2": "" },
-			"PKM-0010": { "C_name": "綠毛蟲", "E_name": "Caterpie", "memo": "全國編號0010", "secondary_id": "0010" , "memo2": "" },
-			"PKM-0011": { "C_name": "鐵甲蛹", "E_name": "Metapod", "memo": "全國編號0011", "secondary_id": "0011" , "memo2": "" },
-			"PKM-0012": { "C_name": "巴大蝶", "E_name": "Butterfree", "memo": "全國編號0012", "secondary_id": "0012" , "memo2": "" },
-			"PKM-0013": { "C_name": "獨角蟲", "E_name": "Weedle", "memo": "全國編號0013", "secondary_id": "0013" , "memo2": "" },
-			"PKM-0014": { "C_name": "鐵殼蛹", "E_name": "Kakuna", "memo": "全國編號0014", "secondary_id": "0014" , "memo2": "" },
-			"PKM-0015": { "C_name": "大針蜂", "E_name": "Beedrill", "memo": "全國編號0015", "secondary_id": "0015" , "memo2": "" },
-			"PKM-0016": { "C_name": "波波", "E_name": "Pidgey", "memo": "全國編號0016", "secondary_id": "0016" , "memo2": "" },
-			"PKM-0017": { "C_name": "比比鳥", "E_name": "Pidgeotto", "memo": "全國編號0017", "secondary_id": "0017" , "memo2": "" },
-			"PKM-0018": { "C_name": "大比鳥", "E_name": "Pidgeot", "memo": "全國編號0018", "secondary_id": "0018" , "memo2": "" },
-			"PKM-0019": { "C_name": "小拉達", "E_name": "Rattata", "memo": "全國編號0019", "secondary_id": "0019" , "memo2": "" },
-			"PKM-0020": { "C_name": "拉達", "E_name": "Raticate", "memo": "全國編號0020", "secondary_id": "0020" , "memo2": "" },
-			"PKM-0021": { "C_name": "烈雀", "E_name": "Spearow", "memo": "全國編號0021", "secondary_id": "0021" , "memo2": "" },
-			"PKM-0022": { "C_name": "大嘴雀", "E_name": "Fearow", "memo": "全國編號0022", "secondary_id": "0022" , "memo2": "" },
-			"PKM-0023": { "C_name": "阿柏蛇", "E_name": "Ekans", "memo": "全國編號0023", "secondary_id": "0023" , "memo2": "" },
-			"PKM-0024": { "C_name": "阿柏怪", "E_name": "Arbok", "memo": "全國編號0024", "secondary_id": "0024" , "memo2": "" },
-			"PKM-0025": { "C_name": "皮卡丘", "E_name": "Pikachu", "memo": "全國編號0025", "secondary_id": "0025" , "memo2": "" },
-			"PKM-0026": { "C_name": "雷丘", "E_name": "Raichu", "memo": "全國編號0026", "secondary_id": "0026" , "memo2": "" },
-			"PKM-0027": { "C_name": "穿山鼠", "E_name": "Sandshrew", "memo": "全國編號0027", "secondary_id": "0027" , "memo2": "" },
-			"PKM-0028": { "C_name": "穿山王", "E_name": "Sandslash", "memo": "全國編號0028", "secondary_id": "0028" , "memo2": "" },
-			"PKM-0029": { "C_name": "尼多蘭", "E_name": "Nidoran♀", "memo": "全國編號0029", "secondary_id": "0029" , "memo2": "" },
-			"PKM-0030": { "C_name": "尼多娜", "E_name": "Nidorina", "memo": "全國編號0030", "secondary_id": "0030" , "memo2": "" },
-            "PKM-0031": { "C_name": "尼多后", "E_name": "Nidoqueen", "memo": "全國編號0031", "secondary_id": "0031", "memo2": "" },
-            "PKM-0032": { "C_name": "尼多朗", "E_name": "Nidoran♂", "memo": "全國編號0032", "secondary_id": "0032", "memo2": "" },
-            "PKM-0033": { "C_name": "尼多力諾", "E_name": "Nidorino", "memo": "全國編號0033", "secondary_id": "0033", "memo2": "" },
-            "PKM-0034": { "C_name": "尼多王", "E_name": "Nidoking", "memo": "全國編號0034", "secondary_id": "0034", "memo2": "" },
-            "PKM-0035": { "C_name": "皮皮", "E_name": "Clefairy", "memo": "全國編號0035", "secondary_id": "0035", "memo2": "" },
-            "PKM-0036": { "C_name": "皮可西", "E_name": "Clefable", "memo": "全國編號0036", "secondary_id": "0036", "memo2": "" },
-            "PKM-0037": { "C_name": "六尾", "E_name": "Vulpix", "memo": "全國編號0037", "secondary_id": "0037", "memo2": "" },
-            "PKM-0038": { "C_name": "九尾", "E_name": "Ninetales", "memo": "全國編號0038", "secondary_id": "0038", "memo2": "" },
-            "PKM-0039": { "C_name": "胖丁", "E_name": "Jigglypuff", "memo": "全國編號0039", "secondary_id": "0039", "memo2": "" },
-            "PKM-0040": { "C_name": "胖可丁", "E_name": "Wigglytuff", "memo": "全國編號0040", "secondary_id": "0040", "memo2": "" },
-            "PKM-0041": { "C_name": "超音蝠", "E_name": "Zubat", "memo": "全國編號0041", "secondary_id": "0041", "memo2": "" },
-            "PKM-0042": { "C_name": "大嘴蝠", "E_name": "Golbat", "memo": "全國編號0042", "secondary_id": "0042", "memo2": "" },
-            "PKM-0043": { "C_name": "走路草", "E_name": "Oddish", "memo": "全國編號0043", "secondary_id": "0043", "memo2": "" },
-            "PKM-0044": { "C_name": "臭臭花", "E_name": "Gloom", "memo": "全國編號0044", "secondary_id": "0044", "memo2": "" },
-            "PKM-0045": { "C_name": "霸王花", "E_name": "Vileplume", "memo": "全國編號0045", "secondary_id": "0045", "memo2": "" },
-            "PKM-0046": { "C_name": "派拉斯", "E_name": "Paras", "memo": "全國編號0046", "secondary_id": "0046", "memo2": "" },
-            "PKM-0047": { "C_name": "派拉斯特", "E_name": "Parasect", "memo": "全國編號0047", "secondary_id": "0047", "memo2": "" },
-            "PKM-0048": { "C_name": "毛球", "E_name": "Venonat", "memo": "全國編號0048", "secondary_id": "0048", "memo2": "" },
-            "PKM-0049": { "C_name": "摩魯蛾", "E_name": "Venomoth", "memo": "全國編號0049", "secondary_id": "0049", "memo2": "" },
-            "PKM-0050": { "C_name": "地鼠", "E_name": "Diglett", "memo": "全國編號0050", "secondary_id": "0050", "memo2": "" },
-            "PKM-0051": { "C_name": "三地鼠", "E_name": "Dugtrio", "memo": "全國編號0051", "secondary_id": "0051", "memo2": "" },
-            "PKM-0052": { "C_name": "喵喵", "E_name": "Meowth", "memo": "全國編號0052", "secondary_id": "0052", "memo2": "" },
-            "PKM-0053": { "C_name": "貓老大", "E_name": "Persian", "memo": "全國編號0053", "secondary_id": "0053", "memo2": "" },
-            "PKM-0054": { "C_name": "可達鴨", "E_name": "Psyduck", "memo": "全國編號0054", "secondary_id": "0054", "memo2": "" },
-            "PKM-0055": { "C_name": "哥達鴨", "E_name": "Golduck", "memo": "全國編號0055", "secondary_id": "0055", "memo2": "" },
-            "PKM-0056": { "C_name": "猴怪", "E_name": "Mankey", "memo": "全國編號0056", "secondary_id": "0056", "memo2": "" },
-            "PKM-0057": { "C_name": "火暴猴", "E_name": "Primeape", "memo": "全國編號0057", "secondary_id": "0057", "memo2": "" },
-            "PKM-0058": { "C_name": "卡蒂狗", "E_name": "Growlithe", "memo": "全國編號0058", "secondary_id": "0058", "memo2": "" },
-            "PKM-0059": { "C_name": "風速狗", "E_name": "Arcanine", "memo": "全國編號0059", "secondary_id": "0059", "memo2": "" },
-            "PKM-0060": { "C_name": "蚊香蝌蚪", "E_name": "Poliwag", "memo": "全國編號0060", "secondary_id": "0060", "memo2": "" },
-            "PKM-0061": { "C_name": "蚊香君", "E_name": "Poliwhirl", "memo": "全國編號0061", "secondary_id": "0061", "memo2": "" },
-            "PKM-0062": { "C_name": "蚊香泳士", "E_name": "Poliwrath", "memo": "全國編號0062", "secondary_id": "0062", "memo2": "" },
-            "PKM-0063": { "C_name": "凱西", "E_name": "Abra", "memo": "全國編號0063", "secondary_id": "0063", "memo2": "" },
-            "PKM-0064": { "C_name": "勇基拉", "E_name": "Kadabra", "memo": "全國編號0064", "secondary_id": "0064", "memo2": "" },
-            "PKM-0065": { "C_name": "胡地", "E_name": "Alakazam", "memo": "全國編號0065", "secondary_id": "0065", "memo2": "" },
-            "PKM-0066": { "C_name": "腕力", "E_name": "Machop", "memo": "全國編號0066", "secondary_id": "0066", "memo2": "" },
-            "PKM-0067": { "C_name": "豪力", "E_name": "Machoke", "memo": "全國編號0067", "secondary_id": "0067", "memo2": "" },
-            "PKM-0068": { "C_name": "怪力", "E_name": "Machamp", "memo": "全國編號0068", "secondary_id": "0068", "memo2": "" },
-            "PKM-0069": { "C_name": "喇叭芽", "E_name": "Bellsprout", "memo": "全國編號0069", "secondary_id": "0069", "memo2": "" },
-            "PKM-0070": { "C_name": "口呆花", "E_name": "Weepinbell", "memo": "全國編號0070", "secondary_id": "0070", "memo2": "" },
-			"PKM-0071": { "C_name": "大食花", "E_name": "Victreebel", "memo": "全國編號0071", "secondary_id": "0071", "memo2": "" },
-			"PKM-0072": { "C_name": "瑪瑙水母", "E_name": "Tentacool", "memo": "全國編號0072", "secondary_id": "0072", "memo2": "" },
-			"PKM-0073": { "C_name": "毒刺水母", "E_name": "Tentacruel", "memo": "全國編號0073", "secondary_id": "0073", "memo2": "" },
-			"PKM-0074": { "C_name": "小拳石", "E_name": "Geodude", "memo": "全國編號0074", "secondary_id": "0074", "memo2": "" },
-			"PKM-0075": { "C_name": "隆隆石", "E_name": "Graveler", "memo": "全國編號0075", "secondary_id": "0075", "memo2": "" },
-			"PKM-0076": { "C_name": "隆隆岩", "E_name": "Golem", "memo": "全國編號0076", "secondary_id": "0076", "memo2": "" },
-			"PKM-0077": { "C_name": "小火馬", "E_name": "Ponyta", "memo": "全國編號0077", "secondary_id": "0077", "memo2": "" },
-			"PKM-0078": { "C_name": "烈焰馬", "E_name": "Rapidash", "memo": "全國編號0078", "secondary_id": "0078", "memo2": "" },
-			"PKM-0079": { "C_name": "呆呆獸", "E_name": "Slowpoke", "memo": "全國編號0079", "secondary_id": "0079", "memo2": "" },
-			"PKM-0080": { "C_name": "呆殼獸", "E_name": "Slowbro", "memo": "全國編號0080", "secondary_id": "0080", "memo2": "" },
-			"PKM-0081": { "C_name": "小磁怪", "E_name": "Magnemite", "memo": "全國編號0081", "secondary_id": "0081", "memo2": "" },
-			"PKM-0082": { "C_name": "三合一磁怪", "E_name": "Magneton", "memo": "全國編號0082", "secondary_id": "0082", "memo2": "" },
-			"PKM-0083": { "C_name": "大蔥鴨", "E_name": "Farfetch'd", "memo": "全國編號0083", "secondary_id": "0083", "memo2": "" },
-			"PKM-0084": { "C_name": "嘟嘟", "E_name": "Doduo", "memo": "全國編號0084", "secondary_id": "0084", "memo2": "" },
-			"PKM-0085": { "C_name": "嘟嘟利", "E_name": "Dodrio", "memo": "全國編號0085", "secondary_id": "0085", "memo2": "" },
-			"PKM-0086": { "C_name": "小海獅", "E_name": "Seel", "memo": "全國編號0086", "secondary_id": "0086", "memo2": "" },
-			"PKM-0087": { "C_name": "白海獅", "E_name": "Dewgong", "memo": "全國編號0087", "secondary_id": "0087", "memo2": "" },
-			"PKM-0088": { "C_name": "臭泥", "E_name": "Grimer", "memo": "全國編號0088", "secondary_id": "0088", "memo2": "" },
-			"PKM-0089": { "C_name": "臭臭泥", "E_name": "Muk", "memo": "全國編號0089", "secondary_id": "0089", "memo2": "" },
-			"PKM-0090": { "C_name": "大舌貝", "E_name": "Shellder", "memo": "全國編號0090", "secondary_id": "0090", "memo2": "" },
-			"PKM-0091": { "C_name": "刺甲貝", "E_name": "Cloyster", "memo": "全國編號0091", "secondary_id": "0091", "memo2": "" },
-			"PKM-0092": { "C_name": "鬼斯", "E_name": "Gastly", "memo": "全國編號0092", "secondary_id": "0092", "memo2": "" },
-			"PKM-0093": { "C_name": "鬼斯通", "E_name": "Haunter", "memo": "全國編號0093", "secondary_id": "0093", "memo2": "" },
-			"PKM-0094": { "C_name": "耿鬼", "E_name": "Gengar", "memo": "全國編號0094", "secondary_id": "0094", "memo2": "" },
-			"PKM-0095": { "C_name": "大岩蛇", "E_name": "Onix", "memo": "全國編號0095", "secondary_id": "0095", "memo2": "" },
-			"PKM-0096": { "C_name": "催眠貘", "E_name": "Drowzee", "memo": "全國編號0096", "secondary_id": "0096", "memo2": "" },
-			"PKM-0097": { "C_name": "引夢貘人", "E_name": "Hypno", "memo": "全國編號0097", "secondary_id": "0097", "memo2": "" },
-			"PKM-0098": { "C_name": "大鉗蟹", "E_name": "Krabby", "memo": "全國編號0098", "secondary_id": "0098", "memo2": "" },
-			"PKM-0099": { "C_name": "巨鉗蟹", "E_name": "Kingler", "memo": "全國編號0099", "secondary_id": "0099", "memo2": "" },
-			"PKM-0100": { "C_name": "霹靂電球", "E_name": "Voltorb", "memo": "全國編號0100", "secondary_id": "0100", "memo2": "" },
-			"PKM-0101": { "C_name": "頑皮雷彈", "E_name": "Electrode", "memo": "全國編號0101", "secondary_id": "0101", "memo2": "" },
-			"PKM-0102": { "C_name": "蛋蛋", "E_name": "Exeggcute", "memo": "全國編號0102", "secondary_id": "0102", "memo2": "" },
-			"PKM-0103": { "C_name": "椰蛋樹", "E_name": "Exeggutor", "memo": "全國編號0103", "secondary_id": "0103", "memo2": "" },
-			"PKM-0104": { "C_name": "卡拉卡拉", "E_name": "Cubone", "memo": "全國編號0104", "secondary_id": "0104", "memo2": "" },
-			"PKM-0105": { "C_name": "嘎啦嘎啦", "E_name": "Marowak", "memo": "全國編號0105", "secondary_id": "0105", "memo2": "" },
-			"PKM-0106": { "C_name": "飛腿郎", "E_name": "Hitmonlee", "memo": "全國編號0106", "secondary_id": "0106", "memo2": "" },
-			"PKM-0107": { "C_name": "快拳郎", "E_name": "Hitmonchan", "memo": "全國編號0107", "secondary_id": "0107", "memo2": "" },
-			"PKM-0108": { "C_name": "大舌頭", "E_name": "Lickitung", "memo": "全國編號0108", "secondary_id": "0108", "memo2": "" },
-			"PKM-0109": { "C_name": "瓦斯彈", "E_name": "Koffing", "memo": "全國編號0109", "secondary_id": "0109", "memo2": "" },
-			"PKM-0110": { "C_name": "雙彈瓦斯", "E_name": "Weezing", "memo": "全國編號0110", "secondary_id": "0110", "memo2": "" },
-			"PKM-0111": { "C_name": "獨角犀牛", "E_name": "Rhyhorn", "memo": "全國編號0111", "secondary_id": "0111", "memo2": "" },
-			"PKM-0112": { "C_name": "鑽角犀獸", "E_name": "Rhydon", "memo": "全國編號0112", "secondary_id": "0112", "memo2": "" },
-			"PKM-0113": { "C_name": "吉利蛋", "E_name": "Chansey", "memo": "全國編號0113", "secondary_id": "0113", "memo2": "" },
-			"PKM-0114": { "C_name": "蔓藤怪", "E_name": "Tangela", "memo": "全國編號0114", "secondary_id": "0114", "memo2": "" },
-			"PKM-0115": { "C_name": "袋獸", "E_name": "Kangaskhan", "memo": "全國編號0115", "secondary_id": "0115", "memo2": "" },
-			"PKM-0116": { "C_name": "墨海馬", "E_name": "Horsea", "memo": "全國編號0116", "secondary_id": "0116", "memo2": "" },
-			"PKM-0117": { "C_name": "海刺龍", "E_name": "Seadra", "memo": "全國編號0117", "secondary_id": "0117", "memo2": "" },
-			"PKM-0118": { "C_name": "角金魚", "E_name": "Goldeen", "memo": "全國編號0118", "secondary_id": "0118", "memo2": "" },
-			"PKM-0119": { "C_name": "金魚王", "E_name": "Seaking", "memo": "全國編號0119", "secondary_id": "0119", "memo2": "" },
-			"PKM-0120": { "C_name": "海星星", "E_name": "Staryu", "memo": "全國編號0120", "secondary_id": "0120", "memo2": "" },
-			"PKM-0121": { "C_name": "寶石海星", "E_name": "Starmie", "memo": "全國編號0121", "secondary_id": "0121", "memo2": "" },
-			"PKM-0122": { "C_name": "魔牆人偶", "E_name": "Mr. Mime", "memo": "全國編號0122", "secondary_id": "0122", "memo2": "" },
-			"PKM-0123": { "C_name": "飛天螳螂", "E_name": "Scyther", "memo": "全國編號0123", "secondary_id": "0123", "memo2": "" },
-			"PKM-0124": { "C_name": "迷唇姐", "E_name": "Jynx", "memo": "全國編號0124", "secondary_id": "0124", "memo2": "" },
-			"PKM-0125": { "C_name": "電擊獸", "E_name": "Electabuzz", "memo": "全國編號0125", "secondary_id": "0125", "memo2": "" },
-			"PKM-0126": { "C_name": "鴨嘴火獸", "E_name": "Magmar", "memo": "全國編號0126", "secondary_id": "0126", "memo2": "" },
-			"PKM-0127": { "C_name": "凱羅斯", "E_name": "Pinsir", "memo": "全國編號0127", "secondary_id": "0127", "memo2": "" },
-			"PKM-0128": { "C_name": "肯泰羅", "E_name": "Tauros", "memo": "全國編號0128", "secondary_id": "0128", "memo2": "" },
-			"PKM-0129": { "C_name": "鯉魚王", "E_name": "Magikarp", "memo": "全國編號0129", "secondary_id": "0129", "memo2": "" },
-			"PKM-0130": { "C_name": "暴鯉龍", "E_name": "Gyarados", "memo": "全國編號0130", "secondary_id": "0130", "memo2": "" },
-			"PKM-0131": { "C_name": "拉普拉斯", "E_name": "Lapras", "memo": "全國編號0131", "secondary_id": "0131", "memo2": "" },
-			"PKM-0132": { "C_name": "百變怪", "E_name": "Ditto", "memo": "全國編號0132", "secondary_id": "0132", "memo2": "" },
-			"PKM-0133": { "C_name": "伊布", "E_name": "Eevee", "memo": "全國編號0133", "secondary_id": "0133", "memo2": "" },
-			"PKM-0134": { "C_name": "水伊布", "E_name": "Vaporeon", "memo": "全國編號0134", "secondary_id": "0134", "memo2": "" },
-			"PKM-0135": { "C_name": "雷伊布", "E_name": "Jolteon", "memo": "全國編號0135", "secondary_id": "0135", "memo2": "" },
-			"PKM-0136": { "C_name": "火伊布", "E_name": "Flareon", "memo": "全國編號0136", "secondary_id": "0136", "memo2": "" },
-			"PKM-0137": { "C_name": "多邊獸", "E_name": "Porygon", "memo": "全國編號0137", "secondary_id": "0137", "memo2": "" },
-			"PKM-0138": { "C_name": "菊石獸", "E_name": "Omanyte", "memo": "全國編號0138", "secondary_id": "0138", "memo2": "" },
-			"PKM-0139": { "C_name": "多刺菊石獸", "E_name": "Omastar", "memo": "全國編號0139", "secondary_id": "0139", "memo2": "" },
-			"PKM-0140": { "C_name": "化石盔", "E_name": "Kabuto", "memo": "全國編號0140", "secondary_id": "0140", "memo2": "" },
-			"PKM-0141": { "C_name": "鐮刀盔", "E_name": "Kabutops", "memo": "全國編號0141", "secondary_id": "0141", "memo2": "" },
-			"PKM-0142": { "C_name": "化石翼龍", "E_name": "Aerodactyl", "memo": "全國編號0142", "secondary_id": "0142", "memo2": "" },
-			"PKM-0143": { "C_name": "卡比獸", "E_name": "Snorlax", "memo": "全國編號0143", "secondary_id": "0143", "memo2": "" },
-			"PKM-0144": { "C_name": "急凍鳥", "E_name": "Articuno", "memo": "全國編號0144", "secondary_id": "0144", "memo2": "" },
-			"PKM-0145": { "C_name": "閃電鳥", "E_name": "Zapdos", "memo": "全國編號0145", "secondary_id": "0145", "memo2": "" },
-			"PKM-0146": { "C_name": "火焰鳥", "E_name": "Moltres", "memo": "全國編號0146", "secondary_id": "0146", "memo2": "" },
-			"PKM-0147": { "C_name": "迷你龍", "E_name": "Dratini", "memo": "全國編號0147", "secondary_id": "0147", "memo2": "" },
-			"PKM-0148": { "C_name": "哈克龍", "E_name": "Dragonair", "memo": "全國編號0148", "secondary_id": "0148", "memo2": "" },
-			"PKM-0149": { "C_name": "快龍", "E_name": "Dragonite", "memo": "全國編號0149", "secondary_id": "0149", "memo2": "" },
-			"PKM-0150": { "C_name": "超夢", "E_name": "Mewtwo", "memo": "全國編號0150", "secondary_id": "0150", "memo2": "" },
-			"PKM-0151": { "C_name": "夢幻", "E_name": "Mew", "memo": "全國編號0151", "secondary_id": "0151", "memo2": "" },
-			"PKM-0152": { "C_name": "菊草葉", "E_name": "Chikorita", "memo": "全國編號0152", "secondary_id": "0152", "memo2": "" },
-			"PKM-0153": { "C_name": "月桂葉", "E_name": "Bayleef", "memo": "全國編號0153", "secondary_id": "0153", "memo2": "" },
-			"PKM-0154": { "C_name": "大竺葵", "E_name": "Meganium", "memo": "全國編號0154", "secondary_id": "0154", "memo2": "" },
-			"PKM-0155": { "C_name": "火球鼠", "E_name": "Cyndaquil", "memo": "全國編號0155", "secondary_id": "0155", "memo2": "" },
-			"PKM-0156": { "C_name": "火岩鼠", "E_name": "Quilava", "memo": "全國編號0156", "secondary_id": "0156", "memo2": "" },
-			"PKM-0157": { "C_name": "火暴獸", "E_name": "Typhlosion", "memo": "全國編號0157", "secondary_id": "0157", "memo2": "" },
-			"PKM-0158": { "C_name": "小鋸鱷", "E_name": "Totodile", "memo": "全國編號0158", "secondary_id": "0158", "memo2": "" },
-			"PKM-0159": { "C_name": "藍鱷", "E_name": "Croconaw", "memo": "全國編號0159", "secondary_id": "0159", "memo2": "" },
-			"PKM-0160": { "C_name": "大力鱷", "E_name": "Feraligatr", "memo": "全國編號0160", "secondary_id": "0160", "memo2": "" },
-			"PKM-0161": { "C_name": "尾立", "E_name": "Sentret", "memo": "全國編號0161", "secondary_id": "0161", "memo2": "" },
-			"PKM-0162": { "C_name": "大尾立", "E_name": "Furret", "memo": "全國編號0162", "secondary_id": "0162", "memo2": "" },
-			"PKM-0163": { "C_name": "咕咕", "E_name": "Hoothoot", "memo": "全國編號0163", "secondary_id": "0163", "memo2": "" },
-			"PKM-0164": { "C_name": "貓頭夜鷹", "E_name": "Noctowl", "memo": "全國編號0164", "secondary_id": "0164", "memo2": "" },
-			"PKM-0165": { "C_name": "芭瓢蟲", "E_name": "Ledyba", "memo": "全國編號0165", "secondary_id": "0165", "memo2": "" },
-			"PKM-0166": { "C_name": "安瓢蟲", "E_name": "Ledian", "memo": "全國編號0166", "secondary_id": "0166", "memo2": "" },
-			"PKM-0167": { "C_name": "圓絲蛛", "E_name": "Spinarak", "memo": "全國編號0167", "secondary_id": "0167", "memo2": "" },
-			"PKM-0168": { "C_name": "阿利多斯", "E_name": "Ariados", "memo": "全國編號0168", "secondary_id": "0168", "memo2": "" },
-			"PKM-0169": { "C_name": "叉字蝠", "E_name": "Crobat", "memo": "全國編號0169", "secondary_id": "0169", "memo2": "" },
-			"PKM-0170": { "C_name": "燈籠魚", "E_name": "Chinchou", "memo": "全國編號0170", "secondary_id": "0170", "memo2": "" },
-			"PKM-0171": { "C_name": "電燈怪", "E_name": "Lanturn", "memo": "全國編號0171", "secondary_id": "0171", "memo2": "" },
-			"PKM-0172": { "C_name": "皮丘", "E_name": "Pichu", "memo": "全國編號0172", "secondary_id": "0172", "memo2": "" },
-			"PKM-0173": { "C_name": "皮皮", "E_name": "Cleffa", "memo": "全國編號0173", "secondary_id": "0173", "memo2": "" },
-			"PKM-0174": { "C_name": "寶寶丁", "E_name": "Igglybuff", "memo": "全國編號0174", "secondary_id": "0174", "memo2": "" },
-			"PKM-0175": { "C_name": "波克比", "E_name": "Togepi", "memo": "全國編號0175", "secondary_id": "0175", "memo2": "" },
-			"PKM-0176": { "C_name": "波克基古", "E_name": "Togetic", "memo": "全國編號0176", "secondary_id": "0176", "memo2": "" },
-			"PKM-0177": { "C_name": "天然雀", "E_name": "Natu", "memo": "全國編號0177", "secondary_id": "0177", "memo2": "" },
-			"PKM-0178": { "C_name": "天然鳥", "E_name": "Xatu", "memo": "全國編號0178", "secondary_id": "0178", "memo2": "" },
-			"PKM-0179": { "C_name": "咩利羊", "E_name": "Mareep", "memo": "全國編號0179", "secondary_id": "0179", "memo2": "" },
-			"PKM-0180": { "C_name": "茸茸羊", "E_name": "Flaaffy", "memo": "全國編號0180", "secondary_id": "0180", "memo2": "" },
-			"PKM-0181": { "C_name": "電龍", "E_name": "Ampharos", "memo": "全國編號0181", "secondary_id": "0181", "memo2": "" },
-			"PKM-0182": { "C_name": "美麗花", "E_name": "Bellossom", "memo": "全國編號0182", "secondary_id": "0182", "memo2": "" },
-			"PKM-0183": { "C_name": "瑪力露", "E_name": "Marill", "memo": "全國編號0183", "secondary_id": "0183", "memo2": "" },
-			"PKM-0184": { "C_name": "瑪力露麗", "E_name": "Azumarill", "memo": "全國編號0184", "secondary_id": "0184", "memo2": "" },
-			"PKM-0185": { "C_name": "胡說樹", "E_name": "Sudowoodo", "memo": "全國編號0185", "secondary_id": "0185", "memo2": "" },
-			"PKM-0186": { "C_name": "蚊香蛙皇", "E_name": "Politoed", "memo": "全國編號0186", "secondary_id": "0186", "memo2": "" },
-			"PKM-0187": { "C_name": "毽子草", "E_name": "Hoppip", "memo": "全國編號0187", "secondary_id": "0187", "memo2": "" },
-			"PKM-0188": { "C_name": "毽子花", "E_name": "Skiploom", "memo": "全國編號0188", "secondary_id": "0188", "memo2": "" },
-			"PKM-0189": { "C_name": "毽子棉", "E_name": "Jumpluff", "memo": "全國編號0189", "secondary_id": "0189", "memo2": "" },
-			"PKM-0190": { "C_name": "長尾怪手", "E_name": "Aipom", "memo": "全國編號0190", "secondary_id": "0190", "memo2": "" },
-			"PKM-0191": { "C_name": "向日種子", "E_name": "Sunkern", "memo": "全國編號0191", "secondary_id": "0191", "memo2": "" },
-			"PKM-0192": { "C_name": "向日花怪", "E_name": "Sunflora", "memo": "全國編號0192", "secondary_id": "0192", "memo2": "" },
-			"PKM-0193": { "C_name": "蜻蜻蜓", "E_name": "Yanma", "memo": "全國編號0193", "secondary_id": "0193", "memo2": "" },
-			"PKM-0194": { "C_name": "烏波", "E_name": "Wooper", "memo": "全國編號0194", "secondary_id": "0194", "memo2": "" },
-			"PKM-0195": { "C_name": "沼王", "E_name": "Quagsire", "memo": "全國編號0195", "secondary_id": "0195", "memo2": "" },
-			"PKM-0196": { "C_name": "太陽伊布", "E_name": "Espeon", "memo": "全國編號0196", "secondary_id": "0196", "memo2": "" },
-			"PKM-0197": { "C_name": "月亮伊布", "E_name": "Umbreon", "memo": "全國編號0197", "secondary_id": "0197", "memo2": "" },
-			"PKM-0198": { "C_name": "黑暗鴉", "E_name": "Murkrow", "memo": "全國編號0198", "secondary_id": "0198", "memo2": "" },
-			"PKM-0199": { "C_name": "呆呆王", "E_name": "Slowking", "memo": "全國編號0199", "secondary_id": "0199", "memo2": "" },
-			"PKM-0200": { "C_name": "夢妖", "E_name": "Misdreavus", "memo": "全國編號0200", "secondary_id": "0200", "memo2": "" },
-			"PKM-0201": { "C_name": "未知圖騰", "E_name": "Unown", "memo": "全國編號0201", "secondary_id": "0201", "memo2": "" },
-			"PKM-0202": { "C_name": "果然翁", "E_name": "Wobbuffet", "memo": "全國編號0202", "secondary_id": "0202", "memo2": "" },
-			"PKM-0203": { "C_name": "麒麟奇", "E_name": "Girafarig", "memo": "全國編號0203", "secondary_id": "0203", "memo2": "" },
-			"PKM-0204": { "C_name": "榛果球", "E_name": "Pineco", "memo": "全國編號0204", "secondary_id": "0204", "memo2": "" },
-			"PKM-0205": { "C_name": "佛烈托斯", "E_name": "Forretress", "memo": "全國編號0205", "secondary_id": "0205", "memo2": "" },
-			"PKM-0206": { "C_name": "土龍弟弟", "E_name": "Dunsparce", "memo": "全國編號0206", "secondary_id": "0206", "memo2": "" },
-			"PKM-0207": { "C_name": "天蠍", "E_name": "Gligar", "memo": "全國編號0207", "secondary_id": "0207", "memo2": "" },
-			"PKM-0208": { "C_name": "大鋼蛇", "E_name": "Steelix", "memo": "全國編號0208", "secondary_id": "0208", "memo2": "" },
-			"PKM-0209": { "C_name": "布魯", "E_name": "Snubbull", "memo": "全國編號0209", "secondary_id": "0209", "memo2": "" },
-			"PKM-0210": { "C_name": "布魯皇", "E_name": "Granbull", "memo": "全國編號0210", "secondary_id": "0210", "memo2": "" },
-			"PKM-0211": { "C_name": "千針魚", "E_name": "Qwilfish", "memo": "全國編號0211", "secondary_id": "0211", "memo2": "" },
-			"PKM-0212": { "C_name": "巨鉗螳螂", "E_name": "Scizor", "memo": "全國編號0212", "secondary_id": "0212", "memo2": "" },
-			"PKM-0213": { "C_name": "壺壺", "E_name": "Shuckle", "memo": "全國編號0213", "secondary_id": "0213", "memo2": "" },
-			"PKM-0214": { "C_name": "赫拉克羅斯", "E_name": "Heracross", "memo": "全國編號0214", "secondary_id": "0214", "memo2": "" },
-			"PKM-0215": { "C_name": "狃拉", "E_name": "Sneasel", "memo": "全國編號0215", "secondary_id": "0215", "memo2": "" },
-			"PKM-0216": { "C_name": "熊寶寶", "E_name": "Teddiursa", "memo": "全國編號0216", "secondary_id": "0216", "memo2": "" },
-			"PKM-0217": { "C_name": "圈圈熊", "E_name": "Ursaring", "memo": "全國編號0217", "secondary_id": "0217", "memo2": "" },
-			"PKM-0218": { "C_name": "熔岩蟲", "E_name": "Slugma", "memo": "全國編號0218", "secondary_id": "0218", "memo2": "" },
-			"PKM-0219": { "C_name": "熔岩蝸牛", "E_name": "Magcargo", "memo": "全國編號0219", "secondary_id": "0219", "memo2": "" },
-			"PKM-0220": { "C_name": "小山豬", "E_name": "Swinub", "memo": "全國編號0220", "secondary_id": "0220", "memo2": "" },
-			"PKM-0221": { "C_name": "長毛豬", "E_name": "Piloswine", "memo": "全國編號0221", "secondary_id": "0221", "memo2": "" },
-			"PKM-0222": { "C_name": "太陽珊瑚", "E_name": "Corsola", "memo": "全國編號0222", "secondary_id": "0222", "memo2": "" },
-			"PKM-0223": { "C_name": "鐵炮魚", "E_name": "Remoraid", "memo": "全國編號0223", "secondary_id": "0223", "memo2": "" },
-			"PKM-0224": { "C_name": "章魚桶", "E_name": "Octillery", "memo": "全國編號0224", "secondary_id": "0224", "memo2": "" },
-			"PKM-0225": { "C_name": "信使鳥", "E_name": "Delibird", "memo": "全國編號0225", "secondary_id": "0225", "memo2": "" },
-			"PKM-0226": { "C_name": "巨翅飛魚", "E_name": "Mantine", "memo": "全國編號0226", "secondary_id": "0226", "memo2": "" },
-			"PKM-0227": { "C_name": "盔甲鳥", "E_name": "Skarmory", "memo": "全國編號0227", "secondary_id": "0227", "memo2": "" },
-			"PKM-0228": { "C_name": "戴魯比", "E_name": "Houndour", "memo": "全國編號0228", "secondary_id": "0228", "memo2": "" },
-			"PKM-0229": { "C_name": "黑魯加", "E_name": "Houndoom", "memo": "全國編號0229", "secondary_id": "0229", "memo2": "" },
-			"PKM-0230": { "C_name": "刺龍王", "E_name": "Kingdra", "memo": "全國編號0230", "secondary_id": "0230", "memo2": "" },
-			"PKM-0231": { "C_name": "小小象", "E_name": "Phanpy", "memo": "全國編號0231", "secondary_id": "0231", "memo2": "" },
-			"PKM-0232": { "C_name": "小小象", "E_name": "Donphan", "memo": "全國編號0232", "secondary_id": "0232", "memo2": "" },
-			"PKM-0233": { "C_name": "多邊獸Ⅱ", "E_name": "Porygon2", "memo": "全國編號0233", "secondary_id": "0233", "memo2": "" },
-			"PKM-0234": { "C_name": "驚角鹿", "E_name": "Stantler", "memo": "全國編號0234", "secondary_id": "0234", "memo2": "" },
-			"PKM-0235": { "C_name": "圖圖犬", "E_name": "Smeargle", "memo": "全國編號0235", "secondary_id": "0235", "memo2": "" },
-			"PKM-0236": { "C_name": "巴爾郎", "E_name": "Tyrogue", "memo": "全國編號0236", "secondary_id": "0236", "memo2": "" },
-			"PKM-0237": { "C_name": "戰舞郎", "E_name": "Hitmontop", "memo": "全國編號0237", "secondary_id": "0237", "memo2": "" },
-			"PKM-0238": { "C_name": "迷唇娃", "E_name": "Smoochum", "memo": "全國編號0238", "secondary_id": "0238", "memo2": "" },
-			"PKM-0239": { "C_name": "電擊怪", "E_name": "Elekid", "memo": "全國編號0239", "secondary_id": "0239", "memo2": "" },
-			"PKM-0240": { "C_name": "鴨嘴寶寶", "E_name": "Magby", "memo": "全國編號0240", "secondary_id": "0240", "memo2": "" },
-			"PKM-0241": { "C_name": "大奶罐", "E_name": "Miltank", "memo": "全國編號0241", "secondary_id": "0241", "memo2": "" },
-			"PKM-0242": { "C_name": "幸福蛋", "E_name": "Blissey", "memo": "全國編號0242", "secondary_id": "0242", "memo2": "" },
-			"PKM-0243": { "C_name": "雷公", "E_name": "Raikou", "memo": "全國編號0243", "secondary_id": "0243", "memo2": "" },
-			"PKM-0244": { "C_name": "炎帝", "E_name": "Entei", "memo": "全國編號0244", "secondary_id": "0244", "memo2": "" },
-			"PKM-0245": { "C_name": "水君", "E_name": "Suicune", "memo": "全國編號0245", "secondary_id": "0245", "memo2": "" },
-			"PKM-0246": { "C_name": "幼基拉斯", "E_name": "Larvitar", "memo": "全國編號0246", "secondary_id": "0246", "memo2": "" },
-			"PKM-0247": { "C_name": "沙基拉斯", "E_name": "Pupitar", "memo": "全國編號0247", "secondary_id": "0247", "memo2": "" },
-			"PKM-0248": { "C_name": "班基拉斯", "E_name": "Tyranitar", "memo": "全國編號0248", "secondary_id": "0248", "memo2": "" },
-			"PKM-0249": { "C_name": "洛奇亞", "E_name": "Lugia", "memo": "全國編號0249", "secondary_id": "0249", "memo2": "" },
-			"PKM-0250": { "C_name": "鳳王", "E_name": "Ho-Oh", "memo": "全國編號0250", "secondary_id": "0250", "memo2": "" },
-			"PKM-0251": { "C_name": "時拉比", "E_name": "Celebi", "memo": "全國編號0251", "secondary_id": "0251", "memo2": "" },			
-			"PKM-0252": { "C_name": "木守宮", "E_name": "Treecko", "memo": "全國編號0252", "secondary_id": "0252", "memo2": "" },
-			"PKM-0253": { "C_name": "森林蜥蜴", "E_name": "Grovyle", "memo": "全國編號0253", "secondary_id": "0253", "memo2": "" },
-			"PKM-0254": { "C_name": "蜥蜴王", "E_name": "Sceptile", "memo": "全國編號0254", "secondary_id": "0254", "memo2": "" },
-			"PKM-0255": { "C_name": "火稚雞", "E_name": "Torchic", "memo": "全國編號0255", "secondary_id": "0255", "memo2": "" },
-			"PKM-0256": { "C_name": "力壯雞", "E_name": "Combusken", "memo": "全國編號0256", "secondary_id": "0256", "memo2": "" },
-			"PKM-0257": { "C_name": "火焰雞", "E_name": "Blaziken", "memo": "全國編號0257", "secondary_id": "0257", "memo2": "" },
-			"PKM-0258": { "C_name": "水躍魚", "E_name": "Mudkip", "memo": "全國編號0258", "secondary_id": "0258", "memo2": "" },
-			"PKM-0259": { "C_name": "沼躍魚", "E_name": "Marshtomp", "memo": "全國編號0259", "secondary_id": "0259", "memo2": "" },
-			"PKM-0260": { "C_name": "巨沼怪", "E_name": "Swampert", "memo": "全國編號0260", "secondary_id": "0260", "memo2": "" },
-			"PKM-0261": { "C_name": "土狼犬", "E_name": "Poochyena", "memo": "全國編號0261", "secondary_id": "0261", "memo2": "" },
-			"PKM-0262": { "C_name": "大狼犬", "E_name": "グラエナ", "memo": "全國編號0262", "secondary_id": "0262", "memo2": "" },
-			"PKM-0263": { "C_name": "蛇紋熊", "E_name": "Zigzagoon", "memo": "全國編號0263", "secondary_id": "0263", "memo2": "" },
-			"PKM-0264": { "C_name": "直衝熊", "E_name": "Linoone", "memo": "全國編號0264", "secondary_id": "0264", "memo2": "" },
-			"PKM-0265": { "C_name": "刺尾蟲", "E_name": "Wurmple", "memo": "全國編號0265", "secondary_id": "0265", "memo2": "" },
-			"PKM-0266": { "C_name": "甲殼繭", "E_name": "Silcoon", "memo": "全國編號0266", "secondary_id": "0266", "memo2": "" },
-			"PKM-0267": { "C_name": "狩獵鳳蝶", "E_name": "Beautifly", "memo": "全國編號0267", "secondary_id": "0267", "memo2": "" },
-			"PKM-0268": { "C_name": "盾甲繭", "E_name": "Cascoon", "memo": "全國編號0268", "secondary_id": "0268", "memo2": "" },
-			"PKM-0269": { "C_name": "毒粉蛾", "E_name": "Dustox", "memo": "全國編號0269", "secondary_id": "0269", "memo2": "" },
-			"PKM-0270": { "C_name": "蓮葉童子", "E_name": "Lotad", "memo": "全國編號0270", "secondary_id": "0270", "memo2": "" },
-			"PKM-0271": { "C_name": "蓮帽小童", "E_name": "Lombre", "memo": "全國編號0271", "secondary_id": "0271", "memo2": "" },
-			"PKM-0272": { "C_name": "樂天河童", "E_name": "Ludicolo", "memo": "全國編號0272", "secondary_id": "0272", "memo2": "" },
-			"PKM-0273": { "C_name": "橡實果", "E_name": "Seedot", "memo": "全國編號0273", "secondary_id": "0273", "memo2": "" },
-			"PKM-0274": { "C_name": "長鼻葉", "E_name": "Nuzleaf", "memo": "全國編號0274", "secondary_id": "0274", "memo2": "" },
-			"PKM-0275": { "C_name": "狡猾天狗", "E_name": "Shiftry", "memo": "全國編號0275", "secondary_id": "0275", "memo2": "" },
-			"PKM-0276": { "C_name": "傲骨燕", "E_name": "Taillow", "memo": "全國編號0276", "secondary_id": "0276", "memo2": "" },
-			"PKM-0277": { "C_name": "大王燕", "E_name": "Swellow", "memo": "全國編號0277", "secondary_id": "0277", "memo2": "" },
-			"PKM-0278": { "C_name": "長翅鷗", "E_name": "Wingull", "memo": "全國編號0278", "secondary_id": "0278", "memo2": "" },
-			"PKM-0279": { "C_name": "大嘴鷗", "E_name": "Pelipper", "memo": "全國編號0279", "secondary_id": "0279", "memo2": "" },
-			"PKM-0280": { "C_name": "拉魯拉絲", "E_name": "Ralts", "memo": "全國編號0280", "secondary_id": "0280", "memo2": "" },
-			"PKM-0281": { "C_name": "奇魯莉安", "E_name": "Kirlia", "memo": "全國編號0281", "secondary_id": "0281", "memo2": "" },
-			"PKM-0282": { "C_name": "沙奈朵", "E_name": "Gardevoir", "memo": "全國編號0282", "secondary_id": "0282", "memo2": "" },
-			"PKM-0283": { "C_name": "溜溜糖球", "E_name": "Surskit", "memo": "全國編號0283", "secondary_id": "0283", "memo2": "" },
-			"PKM-0284": { "C_name": "雨翅蛾", "E_name": "Masquerain", "memo": "全國編號0284", "secondary_id": "0284", "memo2": "" },
-			"PKM-0285": { "C_name": "蘑蘑菇", "E_name": "Shroomish", "memo": "全國編號0285", "secondary_id": "0285", "memo2": "" },
-			"PKM-0286": { "C_name": "斗笠菇", "E_name": "Breloom", "memo": "全國編號0286", "secondary_id": "0286", "memo2": "" },
-			"PKM-0287": { "C_name": "懶人獺", "E_name": "Slakoth", "memo": "全國編號0287", "secondary_id": "0287", "memo2": "" },
-			"PKM-0288": { "C_name": "過動猿", "E_name": "Vigoroth", "memo": "全國編號0288", "secondary_id": "0288", "memo2": "" },
-			"PKM-0289": { "C_name": "請假王", "E_name": "Slaking", "memo": "全國編號0289", "secondary_id": "0289", "memo2": "" },
-			"PKM-0290": { "C_name": "土居忍士", "E_name": "Nincada", "memo": "全國編號0290", "secondary_id": "0290", "memo2": "" },
-			"PKM-0291": { "C_name": "鐵面忍者", "E_name": "Ninjask", "memo": "全國編號0291", "secondary_id": "0291", "memo2": "" },
-			"PKM-0292": { "C_name": "脫殼忍者", "E_name": "Shedinja", "memo": "全國編號0292", "secondary_id": "0292", "memo2": "" },
-			"PKM-0293": { "C_name": "咕妞妞", "E_name": "Whismur", "memo": "全國編號0293", "secondary_id": "0293", "memo2": "" },
-			"PKM-0294": { "C_name": "吼爆彈", "E_name": "Loudred", "memo": "全國編號0294", "secondary_id": "0294", "memo2": "" },
-			"PKM-0295": { "C_name": "爆音怪", "E_name": "Exploud", "memo": "全國編號0295", "secondary_id": "0295", "memo2": "" },
-			"PKM-0296": { "C_name": "幕下力士", "E_name": "Makuhita", "memo": "全國編號0296", "secondary_id": "0296", "memo2": "" },
-			"PKM-0297": { "C_name": "鐵掌力士", "E_name": "Hariyama", "memo": "全國編號0297", "secondary_id": "0297", "memo2": "" },
-			"PKM-0298": { "C_name": "露力麗", "E_name": "Azurill", "memo": "全國編號0298", "secondary_id": "0298", "memo2": "" },
-			"PKM-0299": { "C_name": "朝北鼻", "E_name": "Nosepass", "memo": "全國編號0299", "secondary_id": "0299", "memo2": "" },
-			"PKM-0300": { "C_name": "向尾喵", "E_name": "Skitty", "memo": "全國編號0300", "secondary_id": "0300", "memo2": "" },
-			"PKM-0301": { "C_name": "優雅貓", "E_name": "Delcatty", "memo": "全國編號0301", "secondary_id": "0301", "memo2": "" },
-			"PKM-0302": { "C_name": "勾魂眼", "E_name": "Sableye", "memo": "全國編號0302", "secondary_id": "0302", "memo2": "" },
-			"PKM-0303": { "C_name": "大嘴娃", "E_name": "Mawile", "memo": "全國編號0303", "secondary_id": "0303", "memo2": "" },
-			"PKM-0304": { "C_name": "可可多拉", "E_name": "Aron", "memo": "全國編號0304", "secondary_id": "0304", "memo2": "" },
-			"PKM-0305": { "C_name": "可多拉", "E_name": "Lairon", "memo": "全國編號0305", "secondary_id": "0305", "memo2": "" },
-			"PKM-0306": { "C_name": "波士可多拉", "E_name": "Aggron", "memo": "全國編號0306", "secondary_id": "0306", "memo2": "" },
-			"PKM-0307": { "C_name": "瑪沙那", "E_name": "Meditite", "memo": "全國編號0307", "secondary_id": "0307", "memo2": "" },
-			"PKM-0308": { "C_name": "恰雷姆", "E_name": "Medicham", "memo": "全國編號0308", "secondary_id": "0308", "memo2": "" },
-			"PKM-0309": { "C_name": "落雷獸", "E_name": "Electrike", "memo": "全國編號0309", "secondary_id": "0309", "memo2": "" },
-			"PKM-0310": { "C_name": "雷電獸", "E_name": "Manectric", "memo": "全國編號0310", "secondary_id": "0310", "memo2": "" },
-			"PKM-0311": { "C_name": "正電拍拍", "E_name": "Plusle", "memo": "全國編號0311", "secondary_id": "0311", "memo2": "" },
-			"PKM-0312": { "C_name": "負電拍拍", "E_name": "Minun", "memo": "全國編號0312", "secondary_id": "0312", "memo2": "" },
-			"PKM-0313": { "C_name": "電螢蟲", "E_name": "Volbeat", "memo": "全國編號0313", "secondary_id": "0313", "memo2": "" },
-			"PKM-0314": { "C_name": "甜甜螢", "E_name": "Illumise", "memo": "全國編號0314", "secondary_id": "0314", "memo2": "" },
-			"PKM-0315": { "C_name": "毒薔薇", "E_name": "Roselia", "memo": "全國編號0315", "secondary_id": "0315", "memo2": "" },
-			"PKM-0316": { "C_name": "溶食獸", "E_name": "Gulpin", "memo": "全國編號0316", "secondary_id": "0316", "memo2": "" },
-			"PKM-0317": { "C_name": "吞食獸", "E_name": "Swalot", "memo": "全國編號0317", "secondary_id": "0317", "memo2": "" },
-			"PKM-0318": { "C_name": "利牙魚", "E_name": "Carvanha", "memo": "全國編號0318", "secondary_id": "0318", "memo2": "" },
-			"PKM-0319": { "C_name": "巨牙鯊", "E_name": "Sharpedo", "memo": "全國編號0319", "secondary_id": "0319", "memo2": "" },
-			"PKM-0320": { "C_name": "吼吼鯨", "E_name": "Wailmer", "memo": "全國編號0320", "secondary_id": "0320", "memo2": "" },
-			"PKM-0321": { "C_name": "吼鯨王", "E_name": "Wailord", "memo": "全國編號0321", "secondary_id": "0321", "memo2": "" },
-			"PKM-0322": { "C_name": "呆火駝", "E_name": "Numel", "memo": "全國編號0322", "secondary_id": "0322", "memo2": "" },
-			"PKM-0323": { "C_name": "噴火駝", "E_name": "Camerupt", "memo": "全國編號0323", "secondary_id": "0323", "memo2": "" },
-			"PKM-0324": { "C_name": "煤炭龜", "E_name": "Torkoal", "memo": "全國編號0324", "secondary_id": "0324", "memo2": "" },
-			"PKM-0325": { "C_name": "跳跳豬", "E_name": "Spoink", "memo": "全國編號0325", "secondary_id": "0325", "memo2": "" },
-			"PKM-0326": { "C_name": "噗噗豬", "E_name": "Grumpig", "memo": "全國編號0326", "secondary_id": "0326", "memo2": "" },
-			"PKM-0327": { "C_name": "晃晃斑", "E_name": "Spinda", "memo": "全國編號0327", "secondary_id": "0327", "memo2": "" },
-			"PKM-0328": { "C_name": "大顎蟻", "E_name": "Trapinch", "memo": "全國編號0328", "secondary_id": "0328", "memo2": "" },
-			"PKM-0329": { "C_name": "超音波幼蟲", "E_name": "Vibrava", "memo": "全國編號0329", "secondary_id": "0329", "memo2": "" },
-			"PKM-0330": { "C_name": "沙漠蜻蜓", "E_name": "Flygon", "memo": "全國編號0330", "secondary_id": "0330", "memo2": "" },
-			"PKM-0331": { "C_name": "沙漠奈亞", "E_name": "Cacnea", "memo": "全國編號0331", "secondary_id": "0331", "memo2": "" },
-			"PKM-0332": { "C_name": "夢歌仙人掌", "E_name": "Cacturne", "memo": "全國編號0332", "secondary_id": "0332", "memo2": "" },
-			"PKM-0333": { "C_name": "青綿鳥", "E_name": "Swablu", "memo": "全國編號0333", "secondary_id": "0333", "memo2": "" },
-			"PKM-0334": { "C_name": "七夕青鳥", "E_name": "Altaria", "memo": "全國編號0334", "secondary_id": "0334", "memo2": "" },
-			"PKM-0335": { "C_name": "貓鼬斬", "E_name": "Zangoose", "memo": "全國編號0335", "secondary_id": "0335", "memo2": "" },
-			"PKM-0336": { "C_name": "飯匙蛇", "E_name": "Seviper", "memo": "全國編號0336", "secondary_id": "0336", "memo2": "" },
-			"PKM-0337": { "C_name": "月石", "E_name": "Lunatone", "memo": "全國編號0337", "secondary_id": "0337", "memo2": "" },
-			"PKM-0338": { "C_name": "太陽岩", "E_name": "Solrock", "memo": "全國編號0338", "secondary_id": "0338", "memo2": "" },
-			"PKM-0339": { "C_name": "泥泥鰍", "E_name": "Barboach", "memo": "全國編號0339", "secondary_id": "0339", "memo2": "" },
-			"PKM-0340": { "C_name": "地震鯰魚", "E_name": "Whiscash", "memo": "全國編號0340", "secondary_id": "0340", "memo2": "" },
-			"PKM-0341": { "C_name": "龍蝦小兵", "E_name": "Corphish", "memo": "全國編號0341", "secondary_id": "0341", "memo2": "" },
-			"PKM-0342": { "C_name": "鐵螯龍蝦", "E_name": "Crawdaunt", "memo": "全國編號0342", "secondary_id": "0342", "memo2": "" },
-			"PKM-0343": { "C_name": "天秤偶", "E_name": "Baltoy", "memo": "全國編號0343", "secondary_id": "0343", "memo2": "" },
-			"PKM-0344": { "C_name": "念力土偶", "E_name": "Claydol", "memo": "全國編號0344", "secondary_id": "0344", "memo2": "" },
-			"PKM-0345": { "C_name": "觸手百合", "E_name": "Lileep", "memo": "全國編號0345", "secondary_id": "0345", "memo2": "" },
-			"PKM-0346": { "C_name": "搖籃百合", "E_name": "Cradily", "memo": "全國編號0346", "secondary_id": "0346", "memo2": "" },
-			"PKM-0347": { "C_name": "太古羽蟲", "E_name": "Anorith", "memo": "全國編號0347", "secondary_id": "0347", "memo2": "" },
-			"PKM-0348": { "C_name": "太古盔甲", "E_name": "Armaldo", "memo": "全國編號0348", "secondary_id": "0348", "memo2": "" },
-			"PKM-0349": { "C_name": "醜醜魚", "E_name": "Feebas", "memo": "全國編號0349", "secondary_id": "0349", "memo2": "" },
-			"PKM-0350": { "C_name": "美納斯", "E_name": "Milotic", "memo": "全國編號0350", "secondary_id": "0350", "memo2": "" },
-			"PKM-0351": { "C_name": "飄浮泡泡", "E_name": "Castform", "memo": "全國編號0351", "secondary_id": "0351", "memo2": "" },
-			"PKM-0352": { "C_name": "變隱龍", "E_name": "Kecleon", "memo": "全國編號0352", "secondary_id": "0352", "memo2": "" },
-			"PKM-0353": { "C_name": "怨影娃娃", "E_name": "Shuppet", "memo": "全國編號0353", "secondary_id": "0353", "memo2": "" },
-			"PKM-0354": { "C_name": "詛咒娃娃", "E_name": "Banette", "memo": "全國編號0354", "secondary_id": "0354", "memo2": "" },
-			"PKM-0355": { "C_name": "夜巡靈", "E_name": "Duskull", "memo": "全國編號0355", "secondary_id": "0355", "memo2": "" },
-			"PKM-0356": { "C_name": "彷徨夜靈", "E_name": "Dusclops", "memo": "全國編號0356", "secondary_id": "0356", "memo2": "" },
-			"PKM-0357": { "C_name": "熱帶龍", "E_name": "Tropius", "memo": "全國編號0357", "secondary_id": "0357", "memo2": "" },
-			"PKM-0358": { "C_name": "風鈴鈴", "E_name": "Chimecho", "memo": "全國編號0358", "secondary_id": "0358", "memo2": "" },
-			"PKM-0359": { "C_name": "阿勃梭魯", "E_name": "Absol", "memo": "全國編號0359", "secondary_id": "0359", "memo2": "" },
-			"PKM-0360": { "C_name": "小果然", "E_name": "Wynaut", "memo": "全國編號0360", "secondary_id": "0360", "memo2": "" },
-			"PKM-0361": { "C_name": "雪童子", "E_name": "Snorunt", "memo": "全國編號0361", "secondary_id": "0361", "memo2": "" },
-			"PKM-0362": { "C_name": "冰鬼護", "E_name": "Glalie", "memo": "全國編號0362", "secondary_id": "0362", "memo2": "" },
-			"PKM-0363": { "C_name": "海豹球", "E_name": "Spheal", "memo": "全國編號0363", "secondary_id": "0363", "memo2": "" },
-			"PKM-0364": { "C_name": "海魔獅", "E_name": "Sealeo", "memo": "全國編號0364", "secondary_id": "0364", "memo2": "" },
-			"PKM-0365": { "C_name": "帝牙海獅", "E_name": "Walrein", "memo": "全國編號0365", "secondary_id": "0365", "memo2": "" },
-			"PKM-0366": { "C_name": "珍珠貝", "E_name": "Clamperl", "memo": "全國編號0366", "secondary_id": "0366", "memo2": "" },
-			"PKM-0367": { "C_name": "獵斑魚", "E_name": "Huntail", "memo": "全國編號0367", "secondary_id": "0367", "memo2": "" },
-			"PKM-0368": { "C_name": "櫻花魚", "E_name": "Gorebyss", "memo": "全國編號0368", "secondary_id": "0368", "memo2": "" },
-			"PKM-0369": { "C_name": "古空棘魚", "E_name": "Relicanth", "memo": "全國編號0369", "secondary_id": "0369", "memo2": "" },
-			"PKM-0370": { "C_name": "愛心魚", "E_name": "Luvdisc", "memo": "全國編號0370", "secondary_id": "0370", "memo2": "" },
-			"PKM-0371": { "C_name": "寶貝龍", "E_name": "Bagon", "memo": "全國編號0371", "secondary_id": "0371", "memo2": "" },
-			"PKM-0372": { "C_name": "甲殼龍", "E_name": "Shelgon", "memo": "全國編號0372", "secondary_id": "0372", "memo2": "" },
-			"PKM-0373": { "C_name": "暴飛龍", "E_name": "Salamence", "memo": "全國編號0373", "secondary_id": "0373", "memo2": "" },
-			"PKM-0374": { "C_name": "鐵啞鈴", "E_name": "Beldum", "memo": "全國編號0374", "secondary_id": "0374", "memo2": "" },
-			"PKM-0375": { "C_name": "金屬怪", "E_name": "Metang", "memo": "全國編號0375", "secondary_id": "0375", "memo2": "" },
-			"PKM-0376": { "C_name": "巨金怪", "E_name": "Metagross", "memo": "全國編號0376", "secondary_id": "0376", "memo2": "" },
-			"PKM-0377": { "C_name": "雷吉洛克", "E_name": "Regirock", "memo": "全國編號0377", "secondary_id": "0377", "memo2": "" },
-			"PKM-0378": { "C_name": "雷吉艾斯", "E_name": "Regice", "memo": "全國編號0378", "secondary_id": "0378", "memo2": "" },
-			"PKM-0379": { "C_name": "雷吉斯奇魯", "E_name": "Registeel", "memo": "全國編號0379", "secondary_id": "0379", "memo2": "" },
-			"PKM-0380": { "C_name": "拉帝亞斯", "E_name": "Latias", "memo": "全國編號0380", "secondary_id": "0380", "memo2": "" },
-			"PKM-0381": { "C_name": "拉帝歐斯", "E_name": "Latios", "memo": "全國編號0381", "secondary_id": "0381", "memo2": "" },
-			"PKM-0382": { "C_name": "蓋歐卡", "E_name": "Kyogre", "memo": "全國編號0382", "secondary_id": "0382", "memo2": "" },
-			"PKM-0383": { "C_name": "固拉多", "E_name": "Groudon", "memo": "全國編號0383", "secondary_id": "0383", "memo2": "" },
-			"PKM-0384": { "C_name": "烈空坐", "E_name": "Rayquaza", "memo": "全國編號0384", "secondary_id": "0384", "memo2": "" },
-			"PKM-0385": { "C_name": "基拉祈", "E_name": "Jirachi", "memo": "全國編號0385", "secondary_id": "0385", "memo2": "" },
-			"PKM-0386": { "C_name": "代歐奇希斯", "E_name": "Deoxys", "memo": "全國編號0386", "secondary_id": "0386", "memo2": "" },
-			"PKM-0387": { "C_name": "草苗龜", "E_name": "Turtwig", "memo": "全國編號0387", "secondary_id": "0387", "memo2": "" },
-			"PKM-0388": { "C_name": "樹林龜", "E_name": "Grotle", "memo": "全國編號0388", "secondary_id": "0388", "memo2": "" },
-			"PKM-0389": { "C_name": "土台龜", "E_name": "Torterra", "memo": "全國編號0389", "secondary_id": "0389", "memo2": "" },
-			"PKM-0390": { "C_name": "小火焰猴", "E_name": "Chimchar", "memo": "全國編號0390", "secondary_id": "0390", "memo2": "" },
-			"PKM-0391": { "C_name": "猛火猴", "E_name": "Monferno", "memo": "全國編號0391", "secondary_id": "0391", "memo2": "" },
-			"PKM-0392": { "C_name": "烈焰猴", "E_name": "Infernape", "memo": "全國編號0392", "secondary_id": "0392", "memo2": "" },
-			"PKM-0393": { "C_name": "波加曼", "E_name": "Piplup", "memo": "全國編號0393", "secondary_id": "0393", "memo2": "" },
-			"PKM-0394": { "C_name": "波皇子", "E_name": "Prinplup", "memo": "全國編號0394", "secondary_id": "0394", "memo2": "" },
-			"PKM-0395": { "C_name": "帝王拿波", "E_name": "Empoleon", "memo": "全國編號0395", "secondary_id": "0395", "memo2": "" },
-			"PKM-0396": { "C_name": "姆克兒", "E_name": "Starly", "memo": "全國編號0396", "secondary_id": "0396", "memo2": "" },
-			"PKM-0397": { "C_name": "姆克鳥", "E_name": "Staravia", "memo": "全國編號0397", "secondary_id": "0397", "memo2": "" },
-			"PKM-0398": { "C_name": "姆克鷹", "E_name": "Staraptor", "memo": "全國編號0398", "secondary_id": "0398", "memo2": "" },
-			"PKM-0399": { "C_name": "大牙狸", "E_name": "Bidoof", "memo": "全國編號0399", "secondary_id": "0399", "memo2": "" },
-			"PKM-0400": { "C_name": "大尾狸", "E_name": "Bibarel", "memo": "全國編號0400", "secondary_id": "0400", "memo2": "" },
-			"PKM-0401": { "C_name": "圓法師", "E_name": "Kricketot", "memo": "全國編號0401", "secondary_id": "0401", "memo2": "" },
-			"PKM-0402": { "C_name": "音箱蟀", "E_name": "Kricketune", "memo": "全國編號0402", "secondary_id": "0402", "memo2": "" },
-			"PKM-0403": { "C_name": "小貓怪", "E_name": "Shinx", "memo": "全國編號0403", "secondary_id": "0403", "memo2": "" },
-			"PKM-0404": { "C_name": "勒克貓", "E_name": "Luxio", "memo": "全國編號0404", "secondary_id": "0404", "memo2": "" },
-			"PKM-0405": { "C_name": "倫琴貓", "E_name": "Luxray", "memo": "全國編號0405", "secondary_id": "0405", "memo2": "" },
-			"PKM-0406": { "C_name": "含羞苞", "E_name": "Budew", "memo": "全國編號0406", "secondary_id": "0406", "memo2": "" },
-			"PKM-0407": { "C_name": "羅絲雷朵", "E_name": "Roserade", "memo": "全國編號0407", "secondary_id": "0407", "memo2": "" },
-			"PKM-0408": { "C_name": "頭蓋龍", "E_name": "Cranidos", "memo": "全國編號0408", "secondary_id": "0408", "memo2": "" },
-			"PKM-0409": { "C_name": "戰槌龍", "E_name": "Rampardos", "memo": "全國編號0409", "secondary_id": "0409", "memo2": "" },
-			"PKM-0410": { "C_name": "盾甲龍", "E_name": "Shieldon", "memo": "全國編號0410", "secondary_id": "0410", "memo2": "" },
-			"PKM-0411": { "C_name": "護城龍", "E_name": "Bastiodon", "memo": "全國編號0411", "secondary_id": "0411", "memo2": "" },
-			"PKM-0412": { "C_name": "結草兒", "E_name": "Burmy", "memo": "全國編號0412", "secondary_id": "0412", "memo2": "" },
-			"PKM-0413": { "C_name": "結草貴婦", "E_name": "Wormadam", "memo": "全國編號0413", "secondary_id": "0413", "memo2": "" },
-			"PKM-0414": { "C_name": "紳士蛾", "E_name": "Mothim", "memo": "全國編號0414", "secondary_id": "0414", "memo2": "" },
-			"PKM-0415": { "C_name": "三蜜蜂", "E_name": "Combee", "memo": "全國編號0415", "secondary_id": "0415", "memo2": "" },
-			"PKM-0416": { "C_name": "蜂女王", "E_name": "Vespiquen", "memo": "全國編號0416", "secondary_id": "0416", "memo2": "" },
-			"PKM-0417": { "C_name": "帕奇利茲", "E_name": "Pachirisu", "memo": "全國編號0417", "secondary_id": "0417", "memo2": "" },
-			"PKM-0418": { "C_name": "泳圈鼬", "E_name": "Buizel", "memo": "全國編號0418", "secondary_id": "0418", "memo2": "" },
-			"PKM-0419": { "C_name": "浮潛鼬", "E_name": "Floatzel", "memo": "全國編號0419", "secondary_id": "0419", "memo2": "" },
-			"PKM-0420": { "C_name": "櫻花寶", "E_name": "Cherubi", "memo": "全國編號0420", "secondary_id": "0420", "memo2": "" },
-			"PKM-0421": { "C_name": "櫻花兒", "E_name": "Cherrim", "memo": "全國編號0421", "secondary_id": "0421", "memo2": "" },
-			"PKM-0422": { "C_name": "無殼海兔", "E_name": "Shellos", "memo": "全國編號0422", "secondary_id": "0422", "memo2": "" },
-			"PKM-0423": { "C_name": "海兔獸", "E_name": "Gastrodon", "memo": "全國編號0423", "secondary_id": "0423", "memo2": "" },
-			"PKM-0424": { "C_name": "雙尾怪手", "E_name": "Ambipom", "memo": "全國編號0424", "secondary_id": "0424", "memo2": "" },
-			"PKM-0425": { "C_name": "飄飄球", "E_name": "Drifloon", "memo": "全國編號0425", "secondary_id": "0425", "memo2": "" },
-			"PKM-0426": { "C_name": "隨風球", "E_name": "Drifblim", "memo": "全國編號0426", "secondary_id": "0426", "memo2": "" },
-			"PKM-0427": { "C_name": "卷卷耳", "E_name": "Buneary", "memo": "全國編號0427", "secondary_id": "0427", "memo2": "" },
-			"PKM-0428": { "C_name": "長耳兔", "E_name": "Lopunny", "memo": "全國編號0428", "secondary_id": "0428", "memo2": "" },
-			"PKM-0429": { "C_name": "夢妖魔", "E_name": "Mismagius", "memo": "全國編號0429", "secondary_id": "0429", "memo2": "" },
-			"PKM-0430": { "C_name": "烏鴉頭頭", "E_name": "Honchkrow", "memo": "全國編號0430", "secondary_id": "0430", "memo2": "" },
-			"PKM-0431": { "C_name": "魅力喵", "E_name": "Glameow", "memo": "全國編號0431", "secondary_id": "0431", "memo2": "" },
-			"PKM-0432": { "C_name": "東施喵", "E_name": "Purugly", "memo": "全國編號0432", "secondary_id": "0432", "memo2": "" },
-			"PKM-0433": { "C_name": "鈴鈴詠", "E_name": "Chingling", "memo": "全國編號0433", "secondary_id": "0433", "memo2": "" },
-			"PKM-0434": { "C_name": "臭鼬噗", "E_name": "Stunky", "memo": "全國編號0434", "secondary_id": "0434", "memo2": "" },
-			"PKM-0435": { "C_name": "坦克臭鼬", "E_name": "Skuntank", "memo": "全國編號0435", "secondary_id": "0435", "memo2": "" },
-			"PKM-0436": { "C_name": "銅鏡怪", "E_name": "Bronzor", "memo": "全國編號0436", "secondary_id": "0436", "memo2": "" },
-			"PKM-0437": { "C_name": "青銅鐘", "E_name": "Bronzong", "memo": "全國編號0437", "secondary_id": "0437", "memo2": "" },
-			"PKM-0438": { "C_name": "盆才怪", "E_name": "Bonsly", "memo": "全國編號0438", "secondary_id": "0438", "memo2": "" },
-			"PKM-0439": { "C_name": "魔尼尼", "E_name": "Mime Jr.", "memo": "全國編號0439", "secondary_id": "0439", "memo2": "" },
-			"PKM-0440": { "C_name": "小福蛋", "E_name": "Happiny", "memo": "全國編號0440", "secondary_id": "0440", "memo2": "" },
-			"PKM-0441": { "C_name": "聒噪鳥", "E_name": "Chatot", "memo": "全國編號0441", "secondary_id": "0441", "memo2": "" },
-			"PKM-0442": { "C_name": "花岩怪", "E_name": "Spiritomb", "memo": "全國編號0442", "secondary_id": "0442", "memo2": "" },
-			"PKM-0443": { "C_name": "圓陸鯊", "E_name": "Gible", "memo": "全國編號0443", "secondary_id": "0443", "memo2": "" },
-			"PKM-0444": { "C_name": "尖牙陸鯊", "E_name": "Gabite", "memo": "全國編號0444", "secondary_id": "0444", "memo2": "" },
-			"PKM-0445": { "C_name": "烈咬陸鯊", "E_name": "Garchomp", "memo": "全國編號0445", "secondary_id": "0445", "memo2": "" },
-			"PKM-0446": { "C_name": "小卡比獸", "E_name": "Munchlax", "memo": "全國編號0446", "secondary_id": "0446", "memo2": "" },
-			"PKM-0447": { "C_name": "利歐路", "E_name": "Riolu", "memo": "全國編號0447", "secondary_id": "0447", "memo2": "" },
-			"PKM-0448": { "C_name": "路卡利歐", "E_name": "Lucario", "memo": "全國編號0448", "secondary_id": "0448", "memo2": ",nI<U+82><U+83><ACK>'ënÀw|¬<ACK>}LVÐµQ<GS><U+80>ÒFï<STX>B<U+85>~Nx·I<U+88>ÂçAQ<DC4>T[ì¡^í<U+98>kñRü<U+8D>ï<HT>1<U+85><SI><RS><U+93>â9À¡á<U+9E>öå<U+99>ó<U+99>Q<U+8D>9<U+88>5!<BS>¦©/QN<SO>Äâ<HT><SYN>½<SUB><RS>¿§i¦<CAN>WÈ<NUL><NUL><NUL><NUL><NUL><NUL><NUL><NUL><NUL><NUL>" },
-			"PKM-0449": { "C_name": "沙河馬", "E_name": "Hippopotas", "memo": "全國編號0449", "secondary_id": "0449", "memo2": "" },
-			"PKM-0450": { "C_name": "河馬獸", "E_name": "Hippowdon", "memo": "全國編號0450", "secondary_id": "0450", "memo2": "" },
-			"PKM-0451": { "C_name": "紫天蠍", "E_name": "Skorupi", "memo": "全國編號0451", "secondary_id": "0451", "memo2": "" },
-			"PKM-0452": { "C_name": "龍王蠍", "E_name": "Drapion", "memo": "全國編號0452", "secondary_id": "0452", "memo2": "" },
-			"PKM-0453": { "C_name": "不良蛙", "E_name": "Croagunk", "memo": "全國編號0453", "secondary_id": "0453", "memo2": "" },
-			"PKM-0454": { "C_name": "毒骷蛙", "E_name": "Toxicroak", "memo": "全國編號0454", "secondary_id": "0454", "memo2": "" },
-			"PKM-0455": { "C_name": "尖牙籠", "E_name": "Carnivine", "memo": "全國編號0455", "secondary_id": "0455", "memo2": "" },
-			"PKM-0456": { "C_name": "螢光魚", "E_name": "Finneon", "memo": "全國編號0456", "secondary_id": "0456", "memo2": "" },
-			"PKM-0457": { "C_name": "霓虹魚", "E_name": "Lumineon", "memo": "全國編號0457", "secondary_id": "0457", "memo2": "" },
-			"PKM-0458": { "C_name": "小球飛魚", "E_name": "Mantyke", "memo": "全國編號0458", "secondary_id": "0458", "memo2": "" },
-			"PKM-0459": { "C_name": "雪笠怪", "E_name": "Snover", "memo": "全國編號0459", "secondary_id": "0459", "memo2": "" },
-			"PKM-0460": { "C_name": "暴雪王", "E_name": "Abomasnow", "memo": "全國編號0460", "secondary_id": "0460", "memo2": "" },
-			"PKM-0461": { "C_name": "瑪狃拉", "E_name": "Weavile", "memo": "全國編號0461", "secondary_id": "0461", "memo2": "" },
-			"PKM-0462": { "C_name": "自爆磁怪", "E_name": "Magnezone", "memo": "全國編號0462", "secondary_id": "0462", "memo2": "" },
-			"PKM-0463": { "C_name": "大舌舔", "E_name": "Lickilicky", "memo": "全國編號0463", "secondary_id": "0463", "memo2": "" },
-			"PKM-0464": { "C_name": "超甲狂犀", "E_name": "Rhyperior", "memo": "全國編號0464", "secondary_id": "0464", "memo2": "" },
-			"PKM-0465": { "C_name": "巨蔓藤", "E_name": "Tangrowth", "memo": "全國編號0465", "secondary_id": "0465", "memo2": "" },
-			"PKM-0466": { "C_name": "電擊魔獸", "E_name": "Electivire", "memo": "全國編號0466", "secondary_id": "0466", "memo2": "" },
-			"PKM-0467": { "C_name": "鴨嘴炎獸", "E_name": "Magmortar", "memo": "全國編號0467", "secondary_id": "0467", "memo2": "" },
-			"PKM-0468": { "C_name": "波克基斯", "E_name": "Togekiss", "memo": "全國編號0468", "secondary_id": "0468", "memo2": "" },
-			"PKM-0469": { "C_name": "梅卡陽瑪", "E_name": "Yanmega", "memo": "全國編號0469", "secondary_id": "0469", "memo2": "" },
-			"PKM-0470": { "C_name": "葉伊布", "E_name": "Leafeon", "memo": "全國編號0470", "secondary_id": "0470", "memo2": "" },
-			"PKM-0471": { "C_name": "冰伊布", "E_name": "Glaceon", "memo": "全國編號0471", "secondary_id": "0471", "memo2": "" },
-			"PKM-0472": { "C_name": "天蠍王", "E_name": "Gliscor", "memo": "全國編號0472", "secondary_id": "0472", "memo2": "" },
-			"PKM-0473": { "C_name": "象牙豬", "E_name": "Mamoswine", "memo": "全國編號0473", "secondary_id": "0473", "memo2": "" },
-			"PKM-0474": { "C_name": "多邊獸Ｚ", "E_name": "Porygon-Z", "memo": "全國編號0474", "secondary_id": "0474", "memo2": "" },
-			"PKM-0475": { "C_name": "艾路雷朵", "E_name": "Gallade", "memo": "全國編號0475", "secondary_id": "0475", "memo2": "" },
-			"PKM-0476": { "C_name": "大朝北鼻", "E_name": "Probopass", "memo": "全國編號0476", "secondary_id": "0476", "memo2": "" },
-			"PKM-0477": { "C_name": "黑夜魔靈", "E_name": "Dusknoir", "memo": "全國編號0477", "secondary_id": "0477", "memo2": "" },
-			"PKM-0478": { "C_name": "雪妖女", "E_name": "Froslass", "memo": "全國編號0478", "secondary_id": "0478", "memo2": "" },
-			"PKM-0479": { "C_name": "洛托姆", "E_name": "Rotom", "memo": "全國編號0479", "secondary_id": "0479", "memo2": "" },
-			"PKM-0480": { "C_name": "由克希", "E_name": "Uxie", "memo": "全國編號0480", "secondary_id": "0480", "memo2": "" },
-			"PKM-0481": { "C_name": "艾姆利多", "E_name": "Mesprit", "memo": "全國編號0481", "secondary_id": "0481", "memo2": "" },
-			"PKM-0482": { "C_name": "亞克諾姆", "E_name": "Azelf", "memo": "全國編號0482", "secondary_id": "0482", "memo2": "" },
-			"PKM-0483": { "C_name": "帝牙盧卡", "E_name": "Dialga", "memo": "全國編號0483", "secondary_id": "0483", "memo2": "" },
-			"PKM-0484": { "C_name": "帕路奇亞", "E_name": "Palkia", "memo": "全國編號0484", "secondary_id": "0484", "memo2": "" },
-			"PKM-0485": { "C_name": "席多藍恩", "E_name": "Heatran", "memo": "全國編號0485", "secondary_id": "0485", "memo2": "" },
-			"PKM-0486": { "C_name": "雷吉奇卡斯", "E_name": "Regigigas", "memo": "全國編號0486", "secondary_id": "0486", "memo2": "" },
-			"PKM-0487": { "C_name": "騎拉帝納", "E_name": "Giratina", "memo": "全國編號0487", "secondary_id": "0487", "memo2": "" },
-			"PKM-0488": { "C_name": "克雷色利亞", "E_name": "Cresselia", "memo": "全國編號0488", "secondary_id": "0488", "memo2": "" },
-			"PKM-0489": { "C_name": "霏歐納", "E_name": "Phione", "memo": "全國編號0489", "secondary_id": "0489", "memo2": "" },
-			"PKM-0490": { "C_name": "瑪納霏", "E_name": "Manaphy", "memo": "全國編號0490", "secondary_id": "0490", "memo2": "" },
-			"PKM-0491": { "C_name": "達克萊伊", "E_name": "Darkrai", "memo": "全國編號0491", "secondary_id": "0491", "memo2": "" },
-			"PKM-0492": { "C_name": "謝米", "E_name": "Shaymin", "memo": "全國編號0492", "secondary_id": "0492", "memo2": "" },
-			"PKM-0493": { "C_name": "阿爾宙斯", "E_name": "Arceus", "memo": "全國編號0493", "secondary_id": "0493", "memo2": "" },
-			"PKM-0494": { "C_name": "比克提尼", "E_name": "Victini", "memo": "全國編號0494", "secondary_id": "0494", "memo2": "" },
-			"PKM-0495": { "C_name": "藤藤蛇", "E_name": "Snivy", "memo": "全國編號0495", "secondary_id": "0495", "memo2": "" },
-			"PKM-0496": { "C_name": "青藤蛇", "E_name": "Servine", "memo": "全國編號0496", "secondary_id": "0496", "memo2": "" },
-			"PKM-0497": { "C_name": "君主蛇", "E_name": "Serperior", "memo": "全國編號0497", "secondary_id": "0497", "memo2": "" },
-			"PKM-0498": { "C_name": "暖暖豬", "E_name": "Tepig", "memo": "全國編號0498", "secondary_id": "0498", "memo2": "" },
-			"PKM-0499": { "C_name": "炒炒豬", "E_name": "Pignite", "memo": "全國編號0499", "secondary_id": "0499", "memo2": "" },
-			"PKM-0500": { "C_name": "炎武王", "E_name": "Emboar", "memo": "全國編號0500", "secondary_id": "0500", "memo2": "" },
-			"PKM-0501": { "C_name": "水水獺", "E_name": "Oshawott", "memo": "全國編號0501", "secondary_id": "0501", "memo2": "" },
-			"PKM-0502": { "C_name": "雙刃丸", "E_name": "Dewott", "memo": "全國編號0502", "secondary_id": "0502", "memo2": "" },
-			"PKM-0503": { "C_name": "大劍鬼", "E_name": "Samurott", "memo": "全國編號0503", "secondary_id": "0503", "memo2": "" },
-			"PKM-0504": { "C_name": "探探鼠", "E_name": "Patrat", "memo": "全國編號0504", "secondary_id": "0504", "memo2": "" },
-			"PKM-0505": { "C_name": "步哨鼠", "E_name": "Watchog", "memo": "全國編號0505", "secondary_id": "0505", "memo2": "" },
-			"PKM-0506": { "C_name": "小約克", "E_name": "Lillipup", "memo": "全國編號0506", "secondary_id": "0506", "memo2": "" },
-			"PKM-0507": { "C_name": "哈約克", "E_name": "Herdier", "memo": "全國編號0507", "secondary_id": "0507", "memo2": "" },
-			"PKM-0508": { "C_name": "長毛狗", "E_name": "Stoutland", "memo": "全國編號0508", "secondary_id": "0508", "memo2": "" },
-			"PKM-0509": { "C_name": "扒手貓", "E_name": "Purrloin", "memo": "全國編號0509", "secondary_id": "0509", "memo2": "" },
-			"PKM-0510": { "C_name": "酷豹", "E_name": "Liepard", "memo": "全國編號0510", "secondary_id": "0510", "memo2": "" },
-			"PKM-0511": { "C_name": "花椰猴", "E_name": "Pansage", "memo": "全國編號0511", "secondary_id": "0511", "memo2": "" },
-			"PKM-0512": { "C_name": "花椰猿", "E_name": "Simisage", "memo": "全國編號0512", "secondary_id": "0512", "memo2": "" },
-			"PKM-0513": { "C_name": "爆香猴", "E_name": "Pansear", "memo": "全國編號0513", "secondary_id": "0513", "memo2": "" },
-			"PKM-0514": { "C_name": "爆香猿", "E_name": "Simisear", "memo": "全國編號0514", "secondary_id": "0514", "memo2": "" },
-			"PKM-0515": { "C_name": "冷水猴", "E_name": "Panpour", "memo": "全國編號0515", "secondary_id": "0515", "memo2": "" },
-			"PKM-0516": { "C_name": "冷水猿", "E_name": "Simipour", "memo": "全國編號0516", "secondary_id": "0516", "memo2": "" },
-			"PKM-0517": { "C_name": "食夢夢", "E_name": "Munna", "memo": "全國編號0517", "secondary_id": "0517", "memo2": "" },
-			"PKM-0518": { "C_name": "夢夢蝕", "E_name": "Musharna", "memo": "全國編號0518", "secondary_id": "0518", "memo2": "" },
-			"PKM-0519": { "C_name": "豆豆鴿", "E_name": "Pidove", "memo": "全國編號0519", "secondary_id": "0519", "memo2": "" },
-			"PKM-0520": { "C_name": "波波鴿", "E_name": "Tranquill", "memo": "全國編號0520", "secondary_id": "0520", "memo2": "" },
-			"PKM-0521": { "C_name": "轟隆雉雞", "E_name": "Unfezant", "memo": "全國編號0521", "secondary_id": "0521", "memo2": "" },
-			"PKM-0522": { "C_name": "斑斑馬", "E_name": "Blitzle", "memo": "全國編號0522", "secondary_id": "0522", "memo2": "" },
-			"PKM-0523": { "C_name": "雷電斑馬", "E_name": "Zebstrika", "memo": "全國編號0523", "secondary_id": "0523", "memo2": "" },
-			"PKM-0524": { "C_name": "石丸子", "E_name": "Roggenrola", "memo": "全國編號0524", "secondary_id": "0524", "memo2": "" },
-			"PKM-0525": { "C_name": "地幔岩", "E_name": "Boldore", "memo": "全國編號0525", "secondary_id": "0525", "memo2": "" },
-			"PKM-0526": { "C_name": "龐岩怪", "E_name": "Gigalith", "memo": "全國編號0526", "secondary_id": "0526", "memo2": "" },
-			"PKM-0527": { "C_name": "滾滾蝠", "E_name": "Woobat", "memo": "全國編號0527", "secondary_id": "0527", "memo2": "" },
-			"PKM-0528": { "C_name": "心蝙蝠", "E_name": "Swoobat", "memo": "全國編號0528", "secondary_id": "0528", "memo2": "" },
-			"PKM-0529": { "C_name": "螺釘地鼠", "E_name": "Drilbur", "memo": "全國編號0529", "secondary_id": "0529", "memo2": "" },
-			"PKM-0530": { "C_name": "龍頭地鼠", "E_name": "Excadrill", "memo": "全國編號0530", "secondary_id": "0530", "memo2": "" },
-			"PKM-0531": { "C_name": "差不多娃娃", "E_name": "Audino", "memo": "全國編號0531", "secondary_id": "0531", "memo2": "" },
-			"PKM-0532": { "C_name": "搬運小匠", "E_name": "Timburr", "memo": "全國編號0532", "secondary_id": "0532", "memo2": "" },
-			"PKM-0533": { "C_name": "鐵骨土人", "E_name": "Gurdurr", "memo": "全國編號0533", "secondary_id": "0533", "memo2": "" },
-			"PKM-0534": { "C_name": "修建老匠", "E_name": "Conkeldurr", "memo": "全國編號0534", "secondary_id": "0534", "memo2": "" },
-			"PKM-0535": { "C_name": "圓蝌蚪", "E_name": "Tympole", "memo": "全國編號0535", "secondary_id": "0535", "memo2": "" },
-			"PKM-0536": { "C_name": "藍蟾蜍", "E_name": "Palpitoad", "memo": "全國編號0536", "secondary_id": "0536", "memo2": "" },
-			"PKM-0537": { "C_name": "蟾蜍王", "E_name": "Seismitoad", "memo": "全國編號0537", "secondary_id": "0537", "memo2": "" },
-			"PKM-0538": { "C_name": "投摔鬼", "E_name": "Throh", "memo": "全國編號0538", "secondary_id": "0538", "memo2": "" },
-			"PKM-0539": { "C_name": "打擊鬼", "E_name": "Sawk", "memo": "全國編號0539", "secondary_id": "0539", "memo2": "" },
-			"PKM-0540": { "C_name": "蟲寶包", "E_name": "Sewaddle", "memo": "全國編號0540", "secondary_id": "0540", "memo2": "" },
-			"PKM-0541": { "C_name": "寶包繭", "E_name": "Swadloon", "memo": "全國編號0541", "secondary_id": "0541", "memo2": "" },
-			"PKM-0542": { "C_name": "保母蟲", "E_name": "Leavanny", "memo": "全國編號0542", "secondary_id": "0542", "memo2": "" },
-			"PKM-0543": { "C_name": "百足毒蚣", "E_name": "Venipede", "memo": "全國編號0543", "secondary_id": "0543", "memo2": "" },
-			"PKM-0544": { "C_name": "車輪球", "E_name": "Whirlipede", "memo": "全國編號0544", "secondary_id": "0544", "memo2": "" },
-			"PKM-0545": { "C_name": "蜈蚣王", "E_name": "Scolipede", "memo": "全國編號0545", "secondary_id": "0545", "memo2": "" },
-			"PKM-0546": { "C_name": "木棉球", "E_name": "Cottonee", "memo": "全國編號0546", "secondary_id": "0546", "memo2": "" },
-			"PKM-0547": { "C_name": "風妖精", "E_name": "Whimsicott", "memo": "全國編號0547", "secondary_id": "0547", "memo2": "" },
-			"PKM-0548": { "C_name": "百合根娃娃", "E_name": "Petilil", "memo": "全國編號0548", "secondary_id": "0548", "memo2": "" },
-			"PKM-0549": { "C_name": "裙兒小姐", "E_name": "Lilligant", "memo": "全國編號0549", "secondary_id": "0549", "memo2": "" },
-			"PKM-0550": { "C_name": "野蠻鱸魚", "E_name": "Basculin", "memo": "全國編號0550", "secondary_id": "0550", "memo2": "" },
-			"PKM-0551": { "C_name": "黑眼鱷", "E_name": "Sandile", "memo": "全國編號0551", "secondary_id": "0551", "memo2": "" },
-			"PKM-0552": { "C_name": "混混鱷", "E_name": "Krokorok", "memo": "全國編號0552", "secondary_id": "0552", "memo2": "" },
-			"PKM-0553": { "C_name": "流氓鱷", "E_name": "Krookodile", "memo": "全國編號0553", "secondary_id": "0553", "memo2": "" },
-			"PKM-0554": { "C_name": "火紅不倒翁", "E_name": "Darumaka", "memo": "全國編號0554", "secondary_id": "0554", "memo2": "" },
-			"PKM-0555": { "C_name": "達摩狒狒", "E_name": "Darmanitan", "memo": "全國編號0555", "secondary_id": "0555", "memo2": "" },
-			"PKM-0556": { "C_name": "沙鈴仙人掌", "E_name": "Maractus", "memo": "全國編號0556", "secondary_id": "0556", "memo2": "" },
-			"PKM-0557": { "C_name": "石居蟹", "E_name": "Dwebble", "memo": "全國編號0557", "secondary_id": "0557", "memo2": "" },
-			"PKM-0558": { "C_name": "岩殿居蟹", "E_name": "Crustle", "memo": "全國編號0558", "secondary_id": "0558", "memo2": "" },
-			"PKM-0559": { "C_name": "滑滑小子", "E_name": "Scraggy", "memo": "全國編號0559", "secondary_id": "0559", "memo2": "" },
-			"PKM-0560": { "C_name": "頭巾混混", "E_name": "Scrafty", "memo": "全國編號0560", "secondary_id": "0560", "memo2": "" },
-			"PKM-0561": { "C_name": "象徵鳥", "E_name": "Sigilyph", "memo": "全國編號0561", "secondary_id": "0561", "memo2": "" },
-			"PKM-0562": { "C_name": "哭哭面具", "E_name": "Yamask", "memo": "全國編號0562", "secondary_id": "0562", "memo2": "" },
-			"PKM-0563": { "C_name": "死神棺", "E_name": "Cofagrigus", "memo": "全國編號0563", "secondary_id": "0563", "memo2": "" },
-			"PKM-0564": { "C_name": "原蓋海龜", "E_name": "Tirtouga", "memo": "全國編號0564", "secondary_id": "0564", "memo2": "" },
-			"PKM-0565": { "C_name": "肋骨海龜", "E_name": "Carracosta", "memo": "全國編號0565", "secondary_id": "0565", "memo2": "" },
-			"PKM-0566": { "C_name": "始祖小鳥", "E_name": "Archen", "memo": "全國編號0566", "secondary_id": "0566", "memo2": "" },
-			"PKM-0567": { "C_name": "始祖大鳥", "E_name": "Archeops", "memo": "全國編號0567", "secondary_id": "0567", "memo2": "" },
-			"PKM-0568": { "C_name": "破破袋", "E_name": "Trubbish", "memo": "全國編號0568", "secondary_id": "0568", "memo2": "" },
-			"PKM-0569": { "C_name": "灰塵山", "E_name": "Garbodor", "memo": "全國編號0569", "secondary_id": "0569", "memo2": "" },
-			"PKM-0570": { "C_name": "索羅亞", "E_name": "Zorua", "memo": "全國編號0570", "secondary_id": "0570", "memo2": "" },
-			"PKM-0571": { "C_name": "索羅亞克", "E_name": "Zoroark", "memo": "全國編號0571", "secondary_id": "0571", "memo2": "" },
-			"PKM-0572": { "C_name": "泡沫栗鼠", "E_name": "Minccino", "memo": "全國編號0572", "secondary_id": "0572", "memo2": "" },
-			"PKM-0573": { "C_name": "奇諾栗鼠", "E_name": "Cinccino", "memo": "全國編號0573", "secondary_id": "0573", "memo2": "" },
-			"PKM-0574": { "C_name": "哥德寶寶", "E_name": "Gothita", "memo": "全國編號0574", "secondary_id": "0574", "memo2": "" },
-			"PKM-0575": { "C_name": "哥德小童", "E_name": "Gothorita", "memo": "全國編號0575", "secondary_id": "0575", "memo2": "" },
-			"PKM-0576": { "C_name": "哥德小姐", "E_name": "Gothitelle", "memo": "全國編號0576", "secondary_id": "0576", "memo2": "" },
-			"PKM-0577": { "C_name": "單卵細胞球", "E_name": "Solosis", "memo": "全國編號0577", "secondary_id": "0577", "memo2": "" },
-			"PKM-0578": { "C_name": "雙卵細胞球", "E_name": "Duosion", "memo": "全國編號0578", "secondary_id": "0578", "memo2": "" },
-			"PKM-0579": { "C_name": "人造細胞卵", "E_name": "Reuniclus", "memo": "全國編號0579", "secondary_id": "0579", "memo2": "" },
-			"PKM-0580": { "C_name": "鴨寶寶", "E_name": "Ducklett", "memo": "全國編號0580", "secondary_id": "0580", "memo2": "" },
-			"PKM-0581": { "C_name": "首席天鵝", "E_name": "Swanna", "memo": "全國編號0581", "secondary_id": "0581", "memo2": "" },
-			"PKM-0582": { "C_name": "迷你冰", "E_name": "Vanillite", "memo": "全國編號0582", "secondary_id": "0582", "memo2": "" },
-			"PKM-0583": { "C_name": "多多冰", "E_name": "Vanillish", "memo": "全國編號0583", "secondary_id": "0583", "memo2": "" },
-			"PKM-0584": { "C_name": "雙倍多多冰", "E_name": "Vanilluxe", "memo": "全國編號0584", "secondary_id": "0584", "memo2": "" },
-			"PKM-0585": { "C_name": "四季鹿", "E_name": "Deerling", "memo": "全國編號0585", "secondary_id": "0585", "memo2": "" },
-			"PKM-0586": { "C_name": "芽吹鹿", "E_name": "Sawsbuck", "memo": "全國編號0586", "secondary_id": "0586", "memo2": "" },
-			"PKM-0587": { "C_name": "導電飛鼠", "E_name": "Emolga", "memo": "全國編號0587", "secondary_id": "0587", "memo2": "" },
-			"PKM-0588": { "C_name": "蓋蓋蟲", "E_name": "Karrablast", "memo": "全國編號0588", "secondary_id": "0588", "memo2": "" },
-			"PKM-0589": { "C_name": "騎士蝸牛", "E_name": "Escavalier", "memo": "全國編號0589", "secondary_id": "0589", "memo2": "" },
-			"PKM-0590": { "C_name": "哎呀球菇", "E_name": "Foongus", "memo": "全國編號0590", "secondary_id": "0590", "memo2": "" },
-			"PKM-0591": { "C_name": "敗露球菇", "E_name": "Amoonguss", "memo": "全國編號0591", "secondary_id": "0591", "memo2": "" },
-			"PKM-0592": { "C_name": "輕飄飄", "E_name": "Frillish", "memo": "全國編號0592", "secondary_id": "0592", "memo2": "" },
-			"PKM-0593": { "C_name": "胖嘟嘟", "E_name": "Jellicent", "memo": "全國編號0593", "secondary_id": "0593", "memo2": "" },
-			"PKM-0594": { "C_name": "保母曼波", "E_name": "Alomomola", "memo": "全國編號0594", "secondary_id": "0594", "memo2": "" },
-			"PKM-0595": { "C_name": "電電蟲", "E_name": "Joltik", "memo": "全國編號0595", "secondary_id": "0595", "memo2": "" },
-			"PKM-0596": { "C_name": "電蜘蛛", "E_name": "Galvantula", "memo": "全國編號0596", "secondary_id": "0596", "memo2": "" },
-			"PKM-0597": { "C_name": "種子鐵球", "E_name": "Ferroseed", "memo": "全國編號0597", "secondary_id": "0597", "memo2": "" },
-			"PKM-0598": { "C_name": "堅果啞鈴", "E_name": "Ferrothorn", "memo": "全國編號0598", "secondary_id": "0598", "memo2": "" },
-			"PKM-0599": { "C_name": "齒輪兒", "E_name": "Klink", "memo": "全國編號0599", "secondary_id": "0599", "memo2": "" },
-			"PKM-0600": { "C_name": "齒輪組", "E_name": "Klang", "memo": "全國編號0600", "secondary_id": "0600", "memo2": "" },
-			"PKM-0601": { "C_name": "齒輪怪", "E_name": "Klinklang", "memo": "全國編號0601", "secondary_id": "0601", "memo2": "" },
-			"PKM-0602": { "C_name": "麻麻小魚", "E_name": "Tynamo", "memo": "全國編號0602", "secondary_id": "0602", "memo2": "" },
-			"PKM-0603": { "C_name": "麻麻鰻", "E_name": "Eelektrik", "memo": "全國編號0603", "secondary_id": "0603", "memo2": "" },
-			"PKM-0604": { "C_name": "麻麻鰻魚王", "E_name": "Eelektross", "memo": "全國編號0604", "secondary_id": "0604", "memo2": "" },
-			"PKM-0605": { "C_name": "小灰怪", "E_name": "Elgyem", "memo": "全國編號0605", "secondary_id": "0605", "memo2": "" },
-			"PKM-0606": { "C_name": "大灰怪", "E_name": "Beheeyem", "memo": "全國編號0606", "secondary_id": "0606", "memo2": "" },
-			"PKM-0607": { "C_name": "燭光靈", "E_name": "Litwick", "memo": "全國編號0607", "secondary_id": "0607", "memo2": "" },
-			"PKM-0608": { "C_name": "燈火幽靈", "E_name": "Lampent", "memo": "全國編號0608", "secondary_id": "0608", "memo2": "" },
-			"PKM-0609": { "C_name": "水晶燈火靈", "E_name": "Chandelure", "memo": "全國編號0609", "secondary_id": "0609", "memo2": "" },
-			"PKM-0610": { "C_name": "牙牙", "E_name": "Axew", "memo": "全國編號0610", "secondary_id": "0610", "memo2": "" },
-			"PKM-0611": { "C_name": "斧牙龍", "E_name": "Fraxure", "memo": "全國編號0611", "secondary_id": "0611", "memo2": "" },
-			"PKM-0612": { "C_name": "雙斧戰龍", "E_name": "Haxorus", "memo": "全國編號0612", "secondary_id": "0612", "memo2": "" },
-			"PKM-0613": { "C_name": "噴嚏熊", "E_name": "Cubchoo", "memo": "全國編號0613", "secondary_id": "0613", "memo2": "" },
-			"PKM-0614": { "C_name": "凍原熊", "E_name": "Beartic", "memo": "全國編號0614", "secondary_id": "0614", "memo2": "" },
-			"PKM-0615": { "C_name": "幾何雪花", "E_name": "Cryogonal", "memo": "全國編號0615", "secondary_id": "0615", "memo2": "" },
-			"PKM-0616": { "C_name": "小嘴蝸", "E_name": "Shelmet", "memo": "全國編號0616", "secondary_id": "0616", "memo2": "" },
-			"PKM-0617": { "C_name": "敏捷蟲", "E_name": "Accelgor", "memo": "全國編號0617", "secondary_id": "0617", "memo2": "" },
-			"PKM-0618": { "C_name": "泥巴魚", "E_name": "Stunfisk", "memo": "全國編號0618", "secondary_id": "0618", "memo2": "" },
-			"PKM-0619": { "C_name": "功夫鼬", "E_name": "Mienfoo", "memo": "全國編號0619", "secondary_id": "0619", "memo2": "" },
-			"PKM-0620": { "C_name": "師父鼬", "E_name": "Mienshao", "memo": "全國編號0620", "secondary_id": "0620", "memo2": "" },
-			"PKM-0621": { "C_name": "赤面龍", "E_name": "Druddigon", "memo": "全國編號0621", "secondary_id": "0621", "memo2": "" },
-			"PKM-0622": { "C_name": "泥偶小人", "E_name": "Golett", "memo": "全國編號0622", "secondary_id": "0622", "memo2": "" },
-			"PKM-0623": { "C_name": "泥偶巨人", "E_name": "Golurk", "memo": "全國編號0623", "secondary_id": "0623", "memo2": "" },
-			"PKM-0624": { "C_name": "駒刀小兵", "E_name": "Pawniard", "memo": "全國編號0624", "secondary_id": "0624", "memo2": "" },
-			"PKM-0625": { "C_name": "劈斬司令", "E_name": "Bisharp", "memo": "全國編號0625", "secondary_id": "0625", "memo2": "" },
-			"PKM-0626": { "C_name": "爆炸頭水牛", "E_name": "Bouffalant", "memo": "全國編號0626", "secondary_id": "0626", "memo2": "" },
-			"PKM-0627": { "C_name": "毛頭小鷹", "E_name": "Rufflet", "memo": "全國編號0627", "secondary_id": "0627", "memo2": "" },
-			"PKM-0628": { "C_name": "勇士雄鷹", "E_name": "Braviary", "memo": "全國編號0628", "secondary_id": "0628", "memo2": "" },
-			"PKM-0629": { "C_name": "禿鷹丫頭", "E_name": "Vullaby", "memo": "全國編號0629", "secondary_id": "0629", "memo2": "" },
-			"PKM-0630": { "C_name": "禿鷹娜", "E_name": "Mandibuzz", "memo": "全國編號0630", "secondary_id": "0630", "memo2": "" },
-			"PKM-0631": { "C_name": "食蟻爐", "E_name": "Heatmor", "memo": "全國編號0631", "secondary_id": "0631", "memo2": "" },
-			"PKM-0632": { "C_name": "鐵蟻", "E_name": "Durant", "memo": "全國編號0632", "secondary_id": "0632", "memo2": "" },
-			"PKM-0633": { "C_name": "單首龍", "E_name": "Deino", "memo": "全國編號0633", "secondary_id": "0633", "memo2": "" },
-			"PKM-0634": { "C_name": "雙首龍", "E_name": "Zweilous", "memo": "全國編號0634", "secondary_id": "0634", "memo2": "" },
-			"PKM-0635": { "C_name": "三首惡龍", "E_name": "Hydreigon", "memo": "全國編號0635", "secondary_id": "0635", "memo2": "" },
-			"PKM-0636": { "C_name": "燃燒蟲", "E_name": "Larvesta", "memo": "全國編號0636", "secondary_id": "0636", "memo2": "" },
-			"PKM-0637": { "C_name": "火神蛾", "E_name": "Volcarona", "memo": "全國編號0637", "secondary_id": "0637", "memo2": "" },
-			"PKM-0638": { "C_name": "勾帕路翁", "E_name": "Cobalion", "memo": "全國編號0638", "secondary_id": "0638", "memo2": "" },
-			"PKM-0639": { "C_name": "代拉基翁", "E_name": "Terrakion", "memo": "全國編號0639", "secondary_id": "0639", "memo2": "" },
-			"PKM-0640": { "C_name": "畢力吉翁", "E_name": "Virizion", "memo": "全國編號0640", "secondary_id": "0640", "memo2": "" },
-			"PKM-0641": { "C_name": "龍捲雲", "E_name": "Tornadus", "memo": "全國編號0641", "secondary_id": "0641", "memo2": "" },
-			"PKM-0642": { "C_name": "雷電雲", "E_name": "Thundurus", "memo": "全國編號0642", "secondary_id": "0642", "memo2": "" },
-			"PKM-0643": { "C_name": "萊希拉姆", "E_name": "Reshiram", "memo": "全國編號0643", "secondary_id": "0643", "memo2": "" },
-			"PKM-0644": { "C_name": "捷克羅姆", "E_name": "Zekrom", "memo": "全國編號0644", "secondary_id": "0644", "memo2": "" },
-			"PKM-0645": { "C_name": "土地雲", "E_name": "Landorus", "memo": "全國編號0645", "secondary_id": "0645", "memo2": "" },
-			"PKM-0646": { "C_name": "酋雷姆", "E_name": "Kyurem", "memo": "全國編號0646", "secondary_id": "0646", "memo2": "" },
-			"PKM-0647": { "C_name": "凱路迪歐", "E_name": "Keldeo", "memo": "全國編號0647", "secondary_id": "0647", "memo2": "" },
-			"PKM-0648": { "C_name": "美洛耶塔", "E_name": "Meloetta", "memo": "全國編號0648", "secondary_id": "0648", "memo2": "" },
-			"PKM-0649": { "C_name": "蓋諾賽克特", "E_name": "Genesect", "memo": "全國編號0649", "secondary_id": "0649", "memo2": "" },
-			"PKM-0650": { "C_name": "哈力栗", "E_name": "Chespin", "memo": "全國編號0650", "secondary_id": "0650", "memo2": "" },
-			"PKM-0651": { "C_name": "胖胖哈力", "E_name": "Quilladin", "memo": "全國編號0651", "secondary_id": "0651", "memo2": "" },
-			"PKM-0652": { "C_name": "布里卡隆", "E_name": "Chesnaught", "memo": "全國編號0652", "secondary_id": "0652", "memo2": "" },
-			"PKM-0653": { "C_name": "火狐狸", "E_name": "Fennekin", "memo": "全國編號0653", "secondary_id": "0653", "memo2": "" },
-			"PKM-0654": { "C_name": "長尾火狐", "E_name": "Braixen", "memo": "全國編號0654", "secondary_id": "0654", "memo2": "" },
-			"PKM-0655": { "C_name": "妖火紅狐", "E_name": "Delphox", "memo": "全國編號0655", "secondary_id": "0655", "memo2": "" },
-			"PKM-0656": { "C_name": "呱呱泡蛙", "E_name": "Froakie", "memo": "全國編號0656", "secondary_id": "0656", "memo2": "" },
-			"PKM-0657": { "C_name": "呱頭蛙", "E_name": "Frogadier", "memo": "全國編號0657", "secondary_id": "0657", "memo2": "" },
-			"PKM-0658": { "C_name": "甲賀忍蛙", "E_name": "Greninja", "memo": "全國編號0658", "secondary_id": "0658", "memo2": "" },
-			"PKM-0659": { "C_name": "掘掘兔", "E_name": "Bunnelby", "memo": "全國編號0659", "secondary_id": "0659", "memo2": "" },
-			"PKM-0660": { "C_name": "掘地兔", "E_name": "Diggersby", "memo": "全國編號0660", "secondary_id": "0660", "memo2": "" },
-			"PKM-0661": { "C_name": "小箭雀", "E_name": "Fletchling", "memo": "全國編號0661", "secondary_id": "0661", "memo2": "" },
-			"PKM-0662": { "C_name": "火箭雀", "E_name": "Fletchinder", "memo": "全國編號0662", "secondary_id": "0662", "memo2": "" },
-			"PKM-0663": { "C_name": "烈箭鷹", "E_name": "Talonflame", "memo": "全國編號0663", "secondary_id": "0663", "memo2": "" },
-			"PKM-0664": { "C_name": "粉蝶蟲", "E_name": "Scatterbug", "memo": "全國編號0664", "secondary_id": "0664", "memo2": "" },
-			"PKM-0665": { "C_name": "粉蝶蛹", "E_name": "Spewpa", "memo": "全國編號0665", "secondary_id": "0665", "memo2": "" },
-			"PKM-0666": { "C_name": "彩粉蝶", "E_name": "Vivillon", "memo": "全國編號0666", "secondary_id": "0666", "memo2": "" },
-			"PKM-0667": { "C_name": "小獅獅", "E_name": "Litleo", "memo": "全國編號0667", "secondary_id": "0667", "memo2": "" },
-			"PKM-0668": { "C_name": "火炎獅", "E_name": "Pyroar", "memo": "全國編號0668", "secondary_id": "0668", "memo2": "" },
-			"PKM-0669": { "C_name": "花蓓蓓", "E_name": "Flabébé", "memo": "全國編號0669", "secondary_id": "0669", "memo2": "" },
-			"PKM-0670": { "C_name": "花葉蒂", "E_name": "Floette", "memo": "全國編號0670", "secondary_id": "0670", "memo2": "" },
-			"PKM-0671": { "C_name": "花潔夫人", "E_name": "Florges", "memo": "全國編號0671", "secondary_id": "0671", "memo2": "" },
-			"PKM-0672": { "C_name": "坐騎小羊", "E_name": "Skiddo", "memo": "全國編號0672", "secondary_id": "0672", "memo2": "" },
-			"PKM-0673": { "C_name": "坐騎山羊", "E_name": "Gogoat", "memo": "全國編號0673", "secondary_id": "0673", "memo2": "" },
-			"PKM-0674": { "C_name": "頑皮熊貓", "E_name": "Pancham", "memo": "全國編號0674", "secondary_id": "0674", "memo2": "" },
-			"PKM-0675": { "C_name": "流氓熊貓", "E_name": "Pangoro", "memo": "全國編號0675", "secondary_id": "0675", "memo2": "" },
-			"PKM-0676": { "C_name": "多麗米亞", "E_name": "Furfrou", "memo": "全國編號0676", "secondary_id": "0676", "memo2": "" },
-			"PKM-0677": { "C_name": "妙喵", "E_name": "Espurr", "memo": "全國編號0677", "secondary_id": "0677", "memo2": "" },
-			"PKM-0678": { "C_name": "超能妙喵", "E_name": "Meowstic", "memo": "全國編號0678", "secondary_id": "0678", "memo2": "" },
-			"PKM-0679": { "C_name": "獨劍鞘", "E_name": "Honedge", "memo": "全國編號0679", "secondary_id": "0679", "memo2": "" },
-			"PKM-0680": { "C_name": "雙劍鞘", "E_name": "Doublade", "memo": "全國編號0680", "secondary_id": "0680", "memo2": "" },
-			"PKM-0681": { "C_name": "堅盾劍怪", "E_name": "Aegislash", "memo": "全國編號0681", "secondary_id": "0681", "memo2": "" },
-			"PKM-0682": { "C_name": "粉香香", "E_name": "Spritzee", "memo": "全國編號0682", "secondary_id": "0682", "memo2": "" },
-			"PKM-0683": { "C_name": "芳香精", "E_name": "Aromatisse", "memo": "全國編號0683", "secondary_id": "0683", "memo2": "" },
-			"PKM-0684": { "C_name": "綿綿泡芙", "E_name": "Swirlix", "memo": "全國編號0684", "secondary_id": "0684", "memo2": "" },
-			"PKM-0685": { "C_name": "胖甜妮", "E_name": "Slurpuff", "memo": "全國編號0685", "secondary_id": "0685", "memo2": "" },
-			"PKM-0686": { "C_name": "好啦魷", "E_name": "Inkay", "memo": "全國編號0686", "secondary_id": "0686", "memo2": "" },
-			"PKM-0687": { "C_name": "烏賊王", "E_name": "Malamar", "memo": "全國編號0687", "secondary_id": "0687", "memo2": "" },
-			"PKM-0688": { "C_name": "龜腳腳", "E_name": "Binacle", "memo": "全國編號0688", "secondary_id": "0688", "memo2": "" },
-			"PKM-0689": { "C_name": "龜腳巨鎧", "E_name": "Barbaracle", "memo": "全國編號0689", "secondary_id": "0689", "memo2": "" },
-			"PKM-0690": { "C_name": "毒藻龍", "E_name": "Skrelp", "memo": "全國編號0690", "secondary_id": "0690", "memo2": "" },
-			"PKM-0691": { "C_name": "毒藻龍", "E_name": "Dragalge", "memo": "全國編號0691", "secondary_id": "0691", "memo2": "" },
-			"PKM-0692": { "C_name": "鐵臂槍蝦", "E_name": "Clauncher", "memo": "全國編號0692", "secondary_id": "0692", "memo2": "" },
-			"PKM-0693": { "C_name": "鋼炮臂蝦", "E_name": "Clawitzer", "memo": "全國編號0693", "secondary_id": "0693", "memo2": "" },
-			"PKM-0694": { "C_name": "傘電蜥", "E_name": "Helioptile", "memo": "全國編號0694", "secondary_id": "0694", "memo2": "" },
-			"PKM-0695": { "C_name": "光電傘蜥", "E_name": "Heliolisk", "memo": "全國編號0695", "secondary_id": "0695", "memo2": "" },
-			"PKM-0696": { "C_name": "寶寶暴龍", "E_name": "Tyrunt", "memo": "全國編號0696", "secondary_id": "0696", "memo2": "" },
-			"PKM-0697": { "C_name": "暴君龍", "E_name": "Tyrantrum", "memo": "全國編號0697", "secondary_id": "0697", "memo2": "" },
-			"PKM-0698": { "C_name": "冰雪龍", "E_name": "Amaura", "memo": "全國編號0698", "secondary_id": "0698", "memo2": "" },
-			"PKM-0699": { "C_name": "冰雪巨龍", "E_name": "Aurorus", "memo": "全國編號0699", "secondary_id": "0699", "memo2": "" },
-			"PKM-0700": { "C_name": "仙子伊布", "E_name": "Sylveon", "memo": "全國編號0700", "secondary_id": "0700", "memo2": "" },
-			"PKM-0701": { "C_name": "摔角鷹人", "E_name": "Hawlucha", "memo": "全國編號0701", "secondary_id": "0701", "memo2": "" },
-			"PKM-0702": { "C_name": "咚咚鼠", "E_name": "Dedenne", "memo": "全國編號0702", "secondary_id": "0702", "memo2": "" },
-			"PKM-0703": { "C_name": "小碎鑽", "E_name": "Carbink", "memo": "全國編號0703", "secondary_id": "0703", "memo2": "" },
-			"PKM-0704": { "C_name": "黏黏寶", "E_name": "Goomy", "memo": "全國編號0704", "secondary_id": "0704", "memo2": "" },
-			"PKM-0705": { "C_name": "黏美兒", "E_name": "Sliggoo", "memo": "全國編號0705", "secondary_id": "0705", "memo2": "" },
-			"PKM-0706": { "C_name": "黏美龍", "E_name": "Goodra", "memo": "全國編號0706", "secondary_id": "0706", "memo2": "" },
-			"PKM-0707": { "C_name": "鑰圈兒", "E_name": "Klefki", "memo": "全國編號0707", "secondary_id": "0707", "memo2": "" },
-			"PKM-0708": { "C_name": "小木靈", "E_name": "Phantump", "memo": "全國編號0708", "secondary_id": "0708", "memo2": "" },
-			"PKM-0709": { "C_name": "朽木妖", "E_name": "Trevenant", "memo": "全國編號0709", "secondary_id": "0709", "memo2": "" },
-			"PKM-0710": { "C_name": "南瓜精", "E_name": "Pumpkaboo", "memo": "全國編號0710", "secondary_id": "0710", "memo2": "" },
-			"PKM-0711": { "C_name": "南瓜怪人", "E_name": "Gourgeist", "memo": "全國編號0711", "secondary_id": "0711", "memo2": "" },
-			"PKM-0712": { "C_name": "得羅普", "E_name": "Bergmite", "memo": "全國編號0712", "secondary_id": "0712", "memo2": "" },
-			"PKM-0713": { "C_name": "冰岩怪", "E_name": "Avalugg", "memo": "全國編號0713", "secondary_id": "0713", "memo2": "" },
-			"PKM-0714": { "C_name": "嗡嗡蝠", "E_name": "Noibat", "memo": "全國編號0714", "secondary_id": "0714", "memo2": "" },
-			"PKM-0715": { "C_name": "音波龍", "E_name": "Noivern", "memo": "全國編號0715", "secondary_id": "0715", "memo2": "" },
-			"PKM-0716": { "C_name": "哲爾尼亞斯", "E_name": "Xerneas", "memo": "全國編號0716", "secondary_id": "0716", "memo2": "" },
-			"PKM-0717": { "C_name": "伊裴爾塔爾", "E_name": "Yveltal", "memo": "全國編號0717", "secondary_id": "0717", "memo2": "" },
-			"PKM-0718": { "C_name": "基格爾德", "E_name": "Zygarde", "memo": "全國編號0718", "secondary_id": "0718", "memo2": "" },
-			"PKM-0719": { "C_name": "蒂安希", "E_name": "Diancie", "memo": "全國編號0719", "secondary_id": "0719", "memo2": "" },
-			"PKM-0720": { "C_name": "胡帕", "E_name": "Hoopa", "memo": "全國編號0720", "secondary_id": "0720", "memo2": "" },
-			"PKM-0721": { "C_name": "波爾凱尼恩", "E_name": "Volcanion", "memo": "全國編號0721", "secondary_id": "0721", "memo2": "" },
-			"PKM-0722": { "C_name": "木木梟", "E_name": "Rowlet", "memo": "全國編號0722", "secondary_id": "0722", "memo2": "" },
-			"PKM-0723": { "C_name": "投羽梟", "E_name": "Dartrix", "memo": "全國編號0723", "secondary_id": "0723", "memo2": "" },
-			"PKM-0724": { "C_name": "狙射樹梟", "E_name": "Decidueye", "memo": "全國編號0724", "secondary_id": "0724", "memo2": "" },
-			"PKM-0725": { "C_name": "火斑喵", "E_name": "Litten", "memo": "全國編號0725", "secondary_id": "0725", "memo2": "" },
-			"PKM-0726": { "C_name": "炎熱喵", "E_name": "Torracat", "memo": "全國編號0726", "secondary_id": "0726", "memo2": "" },
-			"PKM-0727": { "C_name": "熾焰咆哮虎", "E_name": "Incineroar", "memo": "全國編號0727", "secondary_id": "0727", "memo2": "" },
-			"PKM-0728": { "C_name": "球球海獅", "E_name": "Popplio", "memo": "全國編號0728", "secondary_id": "0728", "memo2": "" },
-			"PKM-0729": { "C_name": "花漾海獅", "E_name": "Brionne", "memo": "全國編號0729", "secondary_id": "0729", "memo2": "" },
-			"PKM-0730": { "C_name": "西獅海壬", "E_name": "Primarina", "memo": "全國編號0730", "secondary_id": "0730", "memo2": "" },
-			"PKM-0731": { "C_name": "小篤兒", "E_name": "Pikipek", "memo": "全國編號0731", "secondary_id": "0731", "memo2": "" },
-			"PKM-0732": { "C_name": "喇叭啄鳥", "E_name": "Trumbeak", "memo": "全國編號0732", "secondary_id": "0732", "memo2": "" },
-			"PKM-0733": { "C_name": "銃嘴大鳥", "E_name": "Toucannon", "memo": "全國編號0733", "secondary_id": "0733", "memo2": "" },
-			"PKM-0734": { "C_name": "貓鼬少", "E_name": "Yungoos", "memo": "全國編號0734", "secondary_id": "0734", "memo2": "" },
-			"PKM-0735": { "C_name": "貓鼬探長", "E_name": "Gumshoos", "memo": "全國編號0735", "secondary_id": "0735", "memo2": "" },
-			"PKM-0736": { "C_name": "強顎雞母蟲", "E_name": "Grubbin", "memo": "全國編號0736", "secondary_id": "0736", "memo2": "" },
-			"PKM-0737": { "C_name": "蟲電寶", "E_name": "Charjabug", "memo": "全國編號0737", "secondary_id": "0737", "memo2": "" },
-			"PKM-0738": { "C_name": "鍬農炮蟲", "E_name": "Vikavolt", "memo": "全國編號0738", "secondary_id": "0738", "memo2": "" },
-			"PKM-0739": { "C_name": "好勝蟹", "E_name": "Crabrawler", "memo": "全國編號0739", "secondary_id": "0739", "memo2": "" },
-			"PKM-0740": { "C_name": "好勝毛蟹", "E_name": "Crabominable", "memo": "全國編號0740", "secondary_id": "0740", "memo2": "" },
-			"PKM-0741": { "C_name": "花舞鳥", "E_name": "Oricorio", "memo": "全國編號0741", "secondary_id": "0741", "memo2": "" },
-			"PKM-0742": { "C_name": "萌虻", "E_name": "Cutiefly", "memo": "全國編號0742", "secondary_id": "0742", "memo2": "" },
-			"PKM-0743": { "C_name": "蝶結萌虻", "E_name": "Ribombee", "memo": "全國編號0743", "secondary_id": "0743", "memo2": "" },
-			"PKM-0744": { "C_name": "岩狗狗", "E_name": "Rockruff", "memo": "全國編號0744", "secondary_id": "0744", "memo2": "" },
-			"PKM-0745": { "C_name": "鬃岩狼人", "E_name": "Lycanroc", "memo": "全國編號0745", "secondary_id": "0745", "memo2": "" },
-			"PKM-0746": { "C_name": "弱丁魚", "E_name": "Wishiwashi", "memo": "全國編號0746", "secondary_id": "0746", "memo2": "" },
-			"PKM-0747": { "C_name": "好壞星", "E_name": "Mareanie", "memo": "全國編號0747", "secondary_id": "0747", "memo2": "" },
-			"PKM-0748": { "C_name": "超壞星", "E_name": "Toxapex", "memo": "全國編號0748", "secondary_id": "0748", "memo2": "" },
-			"PKM-0749": { "C_name": "泥驢仔", "E_name": "Mudbray", "memo": "全國編號0749", "secondary_id": "0749", "memo2": "" },
-			"PKM-0750": { "C_name": "重泥挽馬", "E_name": "Mudsdale", "memo": "全國編號0750", "secondary_id": "0750", "memo2": "" },
-			"PKM-0751": { "C_name": "滴蛛", "E_name": "Dewpider", "memo": "全國編號0751", "secondary_id": "0751", "memo2": "" },
-			"PKM-0752": { "C_name": "滴蛛霸", "E_name": "Araquanid", "memo": "全國編號0752", "secondary_id": "0752", "memo2": "" },
-			"PKM-0753": { "C_name": "偽螳草", "E_name": "Fantis", "memo": "全國編號0753", "secondary_id": "0753", "memo2": "" },
-			"PKM-0754": { "C_name": "蘭螳花", "E_name": "Lurantis", "memo": "全國編號0754", "secondary_id": "0754", "memo2": "" },
-			"PKM-0755": { "C_name": "睡睡菇", "E_name": "Morelull", "memo": "全國編號0755", "secondary_id": "0755", "memo2": "" },
-			"PKM-0756": { "C_name": "燈罩夜菇", "E_name": "Shiinotic", "memo": "全國編號0756", "secondary_id": "0756", "memo2": "" },
-			"PKM-0757": { "C_name": "夜盜火蜥", "E_name": "Salandit", "memo": "全國編號0757", "secondary_id": "0757", "memo2": "" },
-			"PKM-0758": { "C_name": "焰后蜥", "E_name": "Salazzle", "memo": "全國編號0758", "secondary_id": "0758", "memo2": "" },
-			"PKM-0759": { "C_name": "童偶熊", "E_name": "Stufful", "memo": "全國編號0759", "secondary_id": "0759", "memo2": "" },
-			"PKM-0760": { "C_name": "穿著熊", "E_name": "Bewear", "memo": "全國編號0760", "secondary_id": "0760", "memo2": "" },
-			"PKM-0761": { "C_name": "甜竹竹", "E_name": "Bounsweet", "memo": "全國編號0761", "secondary_id": "0761", "memo2": "" },
-			"PKM-0762": { "C_name": "甜舞妮", "E_name": "Steenee", "memo": "全國編號0762", "secondary_id": "0762", "memo2": "" },
-			"PKM-0763": { "C_name": "甜冷美后", "E_name": "Tsareena", "memo": "全國編號0763", "secondary_id": "0763", "memo2": "" },
-			"PKM-0764": { "C_name": "花療環環", "E_name": "Comfey", "memo": "全國編號0764", "secondary_id": "0764", "memo2": "" },
-			"PKM-0765": { "C_name": "智揮猩", "E_name": "Oranguru", "memo": "全國編號0765", "secondary_id": "0765", "memo2": "" },
-			"PKM-0766": { "C_name": "投擲猴", "E_name": "Passimian", "memo": "全國編號0766", "secondary_id": "0766", "memo2": "" },
-			"PKM-0767": { "C_name": "膽小蟲", "E_name": "Wimpod", "memo": "全國編號0767", "secondary_id": "0767", "memo2": "" },
-			"PKM-0768": { "C_name": "具甲武者", "E_name": "Golisopod", "memo": "全國編號0768", "secondary_id": "0768", "memo2": "" },
-			"PKM-0769": { "C_name": "沙丘娃", "E_name": "Sandygast", "memo": "全國編號0769", "secondary_id": "0769", "memo2": "" },
-			"PKM-0770": { "C_name": "噬沙堡爺", "E_name": "Palossand", "memo": "全國編號0770", "secondary_id": "0770", "memo2": "" },
-			"PKM-0771": { "C_name": "拳海參", "E_name": "Pyukumuku", "memo": "全國編號0771", "secondary_id": "0771", "memo2": "" },
-			"PKM-0772": { "C_name": "屬性：空", "E_name": "Type: Null", "memo": "全國編號0772", "secondary_id": "0772", "memo2": "" },
-			"PKM-0773": { "C_name": "銀伴戰獸", "E_name": "Silvally", "memo": "全國編號0773", "secondary_id": "0773", "memo2": "" },
-			"PKM-0774": { "C_name": "小隕星", "E_name": "Minior", "memo": "全國編號0774", "secondary_id": "0774", "memo2": "" },
-			"PKM-0775": { "C_name": "樹枕尾熊", "E_name": "Komala", "memo": "全國編號0775", "secondary_id": "0775", "memo2": "" },
-			"PKM-0776": { "C_name": "爆焰龜獸", "E_name": "Turtonator", "memo": "全國編號0776", "secondary_id": "0776", "memo2": "" },
-			"PKM-0777": { "C_name": "托戈德瑪爾", "E_name": "Togedemaru", "memo": "全國編號0777", "secondary_id": "0777", "memo2": "" },
-			"PKM-0778": { "C_name": "謎擬丘", "E_name": "Mimikyu", "memo": "全國編號0778", "secondary_id": "0778", "memo2": "" },
-			"PKM-0779": { "C_name": "磨牙彩虹魚", "E_name": "Bruxish", "memo": "全國編號0779", "secondary_id": "0779", "memo2": "" },
-			"PKM-0780": { "C_name": "老翁龍", "E_name": "Drampa", "memo": "全國編號0780", "secondary_id": "0780", "memo2": "" },
-			"PKM-0781": { "C_name": "破破舵輪", "E_name": "Dhelmise", "memo": "全國編號0781", "secondary_id": "0781", "memo2": "" },
-			"PKM-0782": { "C_name": "心鱗寶", "E_name": "Jangmo-o", "memo": "全國編號0782", "secondary_id": "0782", "memo2": "" },
-			"PKM-0783": { "C_name": "鱗甲龍", "E_name": "Hakamo-o", "memo": "全國編號0783", "secondary_id": "0783", "memo2": "" },
-			"PKM-0784": { "C_name": "杖尾鱗甲龍", "E_name": "Kommo-o", "memo": "全國編號0784", "secondary_id": "0784", "memo2": "" },
-			"PKM-0785": { "C_name": "卡璞・鳴鳴", "E_name": "Tapu Koko", "memo": "全國編號0785", "secondary_id": "0785", "memo2": "" },
-			"PKM-0786": { "C_name": "卡璞・蝶蝶", "E_name": "Tapu Lele", "memo": "全國編號0786", "secondary_id": "0786", "memo2": "" },
-			"PKM-0787": { "C_name": "卡璞・哞哞", "E_name": "Tapu Bulu", "memo": "全國編號0787", "secondary_id": "0787", "memo2": "" },
-			"PKM-0788": { "C_name": "卡璞・鰭鰭", "E_name": "Tapu Fini", "memo": "全國編號0788", "secondary_id": "0788", "memo2": "" },
-			"PKM-0789": { "C_name": "科斯莫古", "E_name": "Cosmog", "memo": "全國編號0789", "secondary_id": "0789", "memo2": "" },
-			"PKM-0790": { "C_name": "科斯莫姆", "E_name": "Cosmoem", "memo": "全國編號0790", "secondary_id": "0790", "memo2": "" },
-			"PKM-0791": { "C_name": "索爾迦雷歐", "E_name": "Solgaleo", "memo": "全國編號0791", "secondary_id": "0791", "memo2": "" },
-			"PKM-0792": { "C_name": "露奈雅拉", "E_name": "Lunala", "memo": "全國編號0792", "secondary_id": "0792", "memo2": "" },
-			"PKM-0793": { "C_name": "虛吾伊德", "E_name": "Nihilego", "memo": "全國編號0793", "secondary_id": "0793", "memo2": "" },
-			"PKM-0794": { "C_name": "爆肌蚊", "E_name": "Buzzwole", "memo": "全國編號0794", "secondary_id": "0794", "memo2": "" },
-			"PKM-0795": { "C_name": "費洛美螂", "E_name": "Pheromosa", "memo": "全國編號0795", "secondary_id": "0795", "memo2": "" },
-			"PKM-0796": { "C_name": "電束木", "E_name": "Xurkitree", "memo": "全國編號0796", "secondary_id": "0796", "memo2": "" },
-			"PKM-0797": { "C_name": "鐵火輝夜", "E_name": "Celesteela", "memo": "全國編號0797", "secondary_id": "0797", "memo2": "" },
-			"PKM-0798": { "C_name": "紙御劍", "E_name": "Kartana", "memo": "全國編號0798", "secondary_id": "0798", "memo2": "" },
-			"PKM-0799": { "C_name": "惡食大王", "E_name": "Guzzlord", "memo": "全國編號0799", "secondary_id": "0799", "memo2": "" },
-			"PKM-0800": { "C_name": "奈克洛茲瑪", "E_name": "Necrozma", "memo": "全國編號0800", "secondary_id": "0800", "memo2": "" },
-			"PKM-0801": { "C_name": "瑪機雅娜", "E_name": "Magearna", "memo": "全國編號0801", "secondary_id": "0801", "memo2": "" },
-			"PKM-0802": { "C_name": "瑪夏多", "E_name": "Marshadow", "memo": "全國編號0802", "secondary_id": "0802", "memo2": "" },
-			"PKM-0803": { "C_name": "毒貝比", "E_name": "Poipole", "memo": "全國編號0803", "secondary_id": "0803", "memo2": "" },
-			"PKM-0804": { "C_name": "四顎針龍", "E_name": "Naganadel", "memo": "全國編號0804", "secondary_id": "0804", "memo2": "" },
-			"PKM-0805": { "C_name": "磊磊石", "E_name": "Stakataka", "memo": "全國編號0805", "secondary_id": "0805", "memo2": "" },
-			"PKM-0806": { "C_name": "砰頭小丑", "E_name": "Blacephalon", "memo": "全國編號0806", "secondary_id": "0806", "memo2": "" },
-			"PKM-0807": { "C_name": "捷拉奧拉", "E_name": "Zeraora", "memo": "全國編號0807", "secondary_id": "0807", "memo2": "" },
-			"PKM-0808": { "C_name": "美錄坦", "E_name": "Meltan", "memo": "全國編號0808", "secondary_id": "0808", "memo2": "" },
-			"PKM-0809": { "C_name": "美錄梅塔", "E_name": "Melmetal", "memo": "全國編號0809", "secondary_id": "0809", "memo2": "" },
-			"PKM-0810": { "C_name": "敲音猴", "E_name": "Grookey", "memo": "全國編號0810", "secondary_id": "0810", "memo2": "" },
-			"PKM-0811": { "C_name": "啪咚猴", "E_name": "Thwackey", "memo": "全國編號0811", "secondary_id": "0811", "memo2": "" },
-			"PKM-0812": { "C_name": "轟擂金剛猩", "E_name": "Rillaboom", "memo": "全國編號0812", "secondary_id": "0812", "memo2": "" },
-			"PKM-0813": { "C_name": "炎兔兒", "E_name": "Scorbunny", "memo": "全國編號0813", "secondary_id": "0813", "memo2": "" },
-			"PKM-0814": { "C_name": "騰蹴小將", "E_name": "Raboot", "memo": "全國編號0814", "secondary_id": "0814", "memo2": "" },
-			"PKM-0815": { "C_name": "閃焰王牌", "E_name": "Cinderace", "memo": "全國編號0815", "secondary_id": "0815", "memo2": "" },
-			"PKM-0816": { "C_name": "淚眼蜥", "E_name": "Sobble", "memo": "全國編號0816", "secondary_id": "0816", "memo2": "" },
-			"PKM-0817": { "C_name": "變澀蜥", "E_name": "Drizzile", "memo": "全國編號0817", "secondary_id": "0817", "memo2": "" },
-			"PKM-0818": { "C_name": "千面避役", "E_name": "Inteleon", "memo": "全國編號0818", "secondary_id": "0818", "memo2": "" },
-			"PKM-0819": { "C_name": "貪心栗鼠", "E_name": "Skwovet", "memo": "全國編號0819", "secondary_id": "0819", "memo2": "" },
-			"PKM-0820": { "C_name": "藏飽栗鼠", "E_name": "Greedent", "memo": "全國編號0820", "secondary_id": "0820", "memo2": "" },
-			"PKM-0821": { "C_name": "稚山雀", "E_name": "Rookidee", "memo": "全國編號0821", "secondary_id": "0821", "memo2": "" },
-			"PKM-0822": { "C_name": "藍鴉", "E_name": "Corvisquire", "memo": "全國編號0822", "secondary_id": "0822", "memo2": "" },
-			"PKM-0823": { "C_name": "鋼鎧鴉", "E_name": "Corviknight", "memo": "全國編號0823", "secondary_id": "0823", "memo2": "" },
-			"PKM-0824": { "C_name": "索偵蟲", "E_name": "Blipbug", "memo": "全國編號0824", "secondary_id": "0824", "memo2": "" },
-			"PKM-0825": { "C_name": "天罩蟲", "E_name": "Dottler", "memo": "全國編號0825", "secondary_id": "0825", "memo2": "" },
-			"PKM-0826": { "C_name": "以歐路普", "E_name": "Orbeetle", "memo": "全國編號0826", "secondary_id": "0826", "memo2": "" },
-			"PKM-0827": { "C_name": "偷兒狐", "E_name": "Nickit", "memo": "全國編號0827", "secondary_id": "0827", "memo2": "" },
-			"PKM-0828": { "C_name": "狐大盜", "E_name": "Thievul", "memo": "全國編號0828", "secondary_id": "0828", "memo2": "" },
-			"PKM-0829": { "C_name": "幼棉棉", "E_name": "Gossifleur", "memo": "全國編號0829", "secondary_id": "0829", "memo2": "" },
-			"PKM-0830": { "C_name": "白蓬蓬", "E_name": "Eldegoss", "memo": "全國編號0830", "secondary_id": "0830", "memo2": "" },
-			"PKM-0831": { "C_name": "毛辮羊", "E_name": "Wooloo", "memo": "全國編號0831", "secondary_id": "0831", "memo2": "" },
-			"PKM-0832": { "C_name": "毛毛角羊", "E_name": "Dubwool", "memo": "全國編號0832", "secondary_id": "0832", "memo2": "" },
-			"PKM-0833": { "C_name": "咬咬龜", "E_name": "Chewtle", "memo": "全國編號0833", "secondary_id": "0833", "memo2": "" },
-			"PKM-0834": { "C_name": "暴噬龜", "E_name": "Drednaw", "memo": "全國編號0834", "secondary_id": "0834", "memo2": "" },
-			"PKM-0835": { "C_name": "來電汪", "E_name": "Yamper", "memo": "全國編號0835", "secondary_id": "0835", "memo2": "" },
-			"PKM-0836": { "C_name": "逐電犬", "E_name": "Boltund", "memo": "全國編號0836", "secondary_id": "0836", "memo2": "" },
-			"PKM-0837": { "C_name": "小炭仔", "E_name": "Rolycoly", "memo": "全國編號0837", "secondary_id": "0837", "memo2": "" },
-			"PKM-0838": { "C_name": "大炭車", "E_name": "Carkol", "memo": "全國編號0838", "secondary_id": "0838", "memo2": "" },
-			"PKM-0839": { "C_name": "巨炭山", "E_name": "Coalossal", "memo": "全國編號0839", "secondary_id": "0839", "memo2": "" },
-			"PKM-0840": { "C_name": "啃果蟲", "E_name": "Applin", "memo": "全國編號0840", "secondary_id": "0840", "memo2": "" },
-			"PKM-0841": { "C_name": "蘋裹龍", "E_name": "Flapple", "memo": "全國編號0841", "secondary_id": "0841", "memo2": "" },
-			"PKM-0842": { "C_name": "豐蜜龍", "E_name": "Appletun", "memo": "全國編號0842", "secondary_id": "0842", "memo2": "" },
-			"PKM-0843": { "C_name": "沙螺蟒", "E_name": "Silicobra", "memo": "全國編號0843", "secondary_id": "0843", "memo2": "" },
-			"PKM-0844": { "C_name": "沙螺蟒", "E_name": "Sandaconda", "memo": "全國編號0844", "secondary_id": "0844", "memo2": "" },
-			"PKM-0845": { "C_name": "古月鳥", "E_name": "Cramorant", "memo": "全國編號0845", "secondary_id": "0845", "memo2": "" },
-			"PKM-0846": { "C_name": "刺梭魚", "E_name": "Arrokuda", "memo": "全國編號0846", "secondary_id": "0846", "memo2": "" },
-			"PKM-0847": { "C_name": "戽斗尖梭", "E_name": "Barraskewda", "memo": "全國編號0847", "secondary_id": "0847", "memo2": "" },
-			"PKM-0848": { "C_name": "毒電嬰", "E_name": "Toxel", "memo": "全國編號0848", "secondary_id": "0848", "memo2": "" },
-			"PKM-0849": { "C_name": "顫弦蠑螈", "E_name": "Toxtricity", "memo": "全國編號0849", "secondary_id": "0849", "memo2": "" },
-			"PKM-0850": { "C_name": "燒火蚣", "E_name": "Sizzlipede", "memo": "全國編號0850", "secondary_id": "0850", "memo2": "" },
-			"PKM-0851": { "C_name": "焚焰蚣", "E_name": "Centiskorch", "memo": "全國編號0851", "secondary_id": "0851", "memo2": "" },
-			"PKM-0852": { "C_name": "拳拳蛸", "E_name": "Clobbopus", "memo": "全國編號0852", "secondary_id": "0852", "memo2": "" },
-			"PKM-0853": { "C_name": "八爪武師", "E_name": "Grapploct", "memo": "全國編號0853", "secondary_id": "0853", "memo2": "" },
-			"PKM-0854": { "C_name": "來悲茶", "E_name": "Sinistea", "memo": "全國編號0854", "secondary_id": "0854", "memo2": "" },
-			"PKM-0855": { "C_name": "怖思壺", "E_name": "Polteageist", "memo": "全國編號0855", "secondary_id": "0855", "memo2": "" },
-			"PKM-0856": { "C_name": "迷布莉姆", "E_name": "Hatenna", "memo": "全國編號0856", "secondary_id": "0856", "memo2": "" },
-			"PKM-0857": { "C_name": "提布莉姆", "E_name": "Hattrem", "memo": "全國編號0857", "secondary_id": "0857", "memo2": "" },
-			"PKM-0858": { "C_name": "布莉姆溫", "E_name": "Hatterene", "memo": "全國編號0858", "secondary_id": "0858", "memo2": "" },
-			"PKM-0859": { "C_name": "搗蛋小妖", "E_name": "Impidimp", "memo": "全國編號0859", "secondary_id": "0859", "memo2": "" },
-			"PKM-0860": { "C_name": "詐唬魔", "E_name": "Morgrem", "memo": "全國編號0860", "secondary_id": "0860", "memo2": "" },
-			"PKM-0861": { "C_name": "長毛巨魔", "E_name": "Grimmsnarl", "memo": "全國編號0861", "secondary_id": "0861", "memo2": "" },
-			"PKM-0862": { "C_name": "堵攔熊", "E_name": "Obstagoon", "memo": "全國編號0862", "secondary_id": "0862", "memo2": "" },
-			"PKM-0863": { "C_name": "喵頭目", "E_name": "Perrserker", "memo": "全國編號0863", "secondary_id": "0863", "memo2": "" },
-			"PKM-0864": { "C_name": "魔靈珊瑚", "E_name": "Cursola", "memo": "全國編號0864", "secondary_id": "0864", "memo2": "" },
-			"PKM-0865": { "C_name": "蔥遊兵", "E_name": "Sirfetch'd", "memo": "全國編號0865", "secondary_id": "0865", "memo2": "" },
-			"PKM-0866": { "C_name": "踏冰人偶", "E_name": "Mr. Rime", "memo": "全國編號0866", "secondary_id": "0866", "memo2": "" },
-			"PKM-0867": { "C_name": "死神板", "E_name": "Runerigus", "memo": "全國編號0867", "secondary_id": "0867", "memo2": "" },
-			"PKM-0868": { "C_name": "小仙奶", "E_name": "Milcery", "memo": "全國編號0868", "secondary_id": "0868", "memo2": "" },
-			"PKM-0869": { "C_name": "霜奶仙", "E_name": "Alcremie", "memo": "全國編號0869", "secondary_id": "0869", "memo2": "" },
-			"PKM-0870": { "C_name": "列陣兵", "E_name": "Falinks", "memo": "全國編號0870", "secondary_id": "0870", "memo2": "" },
-			"PKM-0871": { "C_name": "拳拳海參", "E_name": "Pincurchin", "memo": "全國編號0871", "secondary_id": "0871", "memo2": "" },
-			"PKM-0872": { "C_name": "雪吞蟲", "E_name": "Snom", "memo": "全國編號0872", "secondary_id": "0872", "memo2": "" },
-			"PKM-0873": { "C_name": "雪絨蛾", "E_name": "Frosmoth", "memo": "全國編號0873", "secondary_id": "0873", "memo2": "" },
-			"PKM-0874": { "C_name": "巨石丁", "E_name": "Stonjourner", "memo": "全國編號0874", "secondary_id": "0874", "memo2": "" },
-			"PKM-0875": { "C_name": "冰砌鵝", "E_name": "Eiscue", "memo": "全國編號0875", "secondary_id": "0875", "memo2": "" },
-			"PKM-0876": { "C_name": "愛管侍", "E_name": "Indeedee", "memo": "全國編號0876", "secondary_id": "0876", "memo2": "" },
-			"PKM-0877": { "C_name": "莫魯貝可", "E_name": "Morpeko", "memo": "全國編號0877", "secondary_id": "0877", "memo2": "" },
-			"PKM-0878": { "C_name": "大王銅象", "E_name": "Cufant", "memo": "全國編號0878", "secondary_id": "0878", "memo2": "" },
-			"PKM-0879": { "C_name": "大王銅象", "E_name": "Copperajah", "memo": "全國編號0879", "secondary_id": "0879", "memo2": "" },
-			"PKM-0880": { "C_name": "雷鳥龍", "E_name": "Dracozolt", "memo": "全國編號0880", "secondary_id": "0880", "memo2": "" },
-			"PKM-0881": { "C_name": "雷鳥海獸", "E_name": "Arctozolt", "memo": "全國編號0881", "secondary_id": "0881", "memo2": "" },
-			"PKM-0882": { "C_name": "鰓魚龍", "E_name": "Dracovish", "memo": "全國編號0882", "secondary_id": "0882", "memo2": "" },
-			"PKM-0883": { "C_name": "鰓魚海獸", "E_name": "Arctovish", "memo": "全國編號0883", "secondary_id": "0883", "memo2": "" },
-			"PKM-0884": { "C_name": "鋁鋼龍", "E_name": "Duraludon", "memo": "全國編號0884", "secondary_id": "0884", "memo2": "" },
-			"PKM-0885": { "C_name": "多龍梅西亞", "E_name": "Dreepy", "memo": "全國編號0885", "secondary_id": "0885", "memo2": "" },
-			"PKM-0886": { "C_name": "多龍奇", "E_name": "Drakloak", "memo": "全國編號0886", "secondary_id": "0886", "memo2": "" },
-			"PKM-0887": { "C_name": "多龍巴魯托", "E_name": "Dragapult", "memo": "全國編號0887", "secondary_id": "0887", "memo2": "" },
-			"PKM-0888": { "C_name": "蒼響", "E_name": "Zacian", "memo": "全國編號0888", "secondary_id": "0888", "memo2": "" },
-			"PKM-0889": { "C_name": "藏瑪然特", "E_name": "Zamazenta", "memo": "全國編號0889", "secondary_id": "0889", "memo2": "" },
-			"PKM-0890": { "C_name": "無極汰那", "E_name": "Eternatus", "memo": "全國編號0890", "secondary_id": "0890", "memo2": "" },
-			"PKM-0891": { "C_name": "熊徒弟", "E_name": "Kubfu", "memo": "全國編號0891", "secondary_id": "0891", "memo2": "" },
-			"PKM-0892": { "C_name": "武道熊師", "E_name": "Urshifu", "memo": "全國編號0892", "secondary_id": "0892", "memo2": "" },
-			"PKM-0893": { "C_name": "薩戮德", "E_name": "Zarude", "memo": "全國編號0893", "secondary_id": "0893", "memo2": "" },
-			"PKM-0894": { "C_name": "雷吉艾勒奇", "E_name": "Regieleki", "memo": "全國編號0894", "secondary_id": "0894", "memo2": "" },
-			"PKM-0895": { "C_name": "雷吉鐸拉戈", "E_name": "Regidrago", "memo": "全國編號0895", "secondary_id": "0895", "memo2": "" },
-			"PKM-0896": { "C_name": "雪暴馬", "E_name": "Glastrier", "memo": "全國編號0896", "secondary_id": "0896", "memo2": "" },
-			"PKM-0897": { "C_name": "靈幽馬", "E_name": "Spectrier", "memo": "全國編號0897", "secondary_id": "0897", "memo2": "" },
-			"PKM-0898": { "C_name": "蕾冠王", "E_name": "Calyrex", "memo": "全國編號0898", "secondary_id": "0898", "memo2": "" },
-			"PKM-0899": { "C_name": "詭角鹿", "E_name": "Wyrdeer", "memo": "全國編號0899", "secondary_id": "0899", "memo2": "" },
-			"PKM-0900": { "C_name": "裹蜜蟲", "E_name": "Kleavor", "memo": "全國編號0900", "secondary_id": "0900", "memo2": "" },
-			"PKM-0901": { "C_name": "月月熊", "E_name": "Ursaluna", "memo": "全國編號0901", "secondary_id": "0901", "memo2": "" },
-			"PKM-0902": { "C_name": "幽尾玄魚", "E_name": "Basculegion", "memo": "全國編號0902", "secondary_id": "0902", "memo2": "" },
-			"PKM-0903": { "C_name": "大狃拉", "E_name": "Sneasler", "memo": "全國編號0903", "secondary_id": "0903", "memo2": "" },
-			"PKM-0904": { "C_name": "萬針魚", "E_name": "Overqwil", "memo": "全國編號0904", "secondary_id": "0904", "memo2": "" },
-			"PKM-0905": { "C_name": "眷戀雲", "E_name": "Enamorus", "memo": "全國編號0905", "secondary_id": "0905", "memo2": "" },
-			"PKM-0906": { "C_name": "新葉喵", "E_name": "Sprigatito", "memo": "全國編號0906", "secondary_id": "0906", "memo2": "" },
-			"PKM-0907": { "C_name": "蒂蕾喵", "E_name": "Floragato", "memo": "全國編號0907", "secondary_id": "0907", "memo2": "" },
-			"PKM-0908": { "C_name": "魔幻假面喵", "E_name": "Meowscarada", "memo": "全國編號0908", "secondary_id": "0908", "memo2": "" },
-			"PKM-0909": { "C_name": "呆火鱷", "E_name": "Fuecoco", "memo": "全國編號0909", "secondary_id": "0909", "memo2": "" },
-			"PKM-0910": { "C_name": "炙燙鱷", "E_name": "Crocalor", "memo": "全國編號0910", "secondary_id": "0910", "memo2": "" },
-			"PKM-0911": { "C_name": "骨紋巨聲鱷", "E_name": "Skeledirge", "memo": "全國編號0911", "secondary_id": "0911", "memo2": "" },
-			"PKM-0912": { "C_name": "潤水鴨", "E_name": "Quaxly", "memo": "全國編號0912", "secondary_id": "0912", "memo2": "" },
-			"PKM-0913": { "C_name": "湧躍鴨", "E_name": "Quaxwell", "memo": "全國編號0913", "secondary_id": "0913", "memo2": "" },
-			"PKM-0914": { "C_name": "狂歡浪舞鴨", "E_name": "Quaquaval", "memo": "全國編號0914", "secondary_id": "0914", "memo2": "" },
-			"PKM-0915": { "C_name": "愛吃豚", "E_name": "Lechonk", "memo": "全國編號0915", "secondary_id": "0915", "memo2": "" },
-			"PKM-0916": { "C_name": "飄香豚", "E_name": "Oinkologne", "memo": "全國編號0916", "secondary_id": "0916", "memo2": "" },
-			"PKM-0917": { "C_name": "團珠蛛", "E_name": "Tarountula", "memo": "全國編號0917", "secondary_id": "0917", "memo2": "" },
-			"PKM-0918": { "C_name": "操陷蛛", "E_name": "Spidops", "memo": "全國編號0918", "secondary_id": "0918", "memo2": "" },
-			"PKM-0919": { "C_name": "豆蟋蟀", "E_name": "Nymble", "memo": "全國編號0919", "secondary_id": "0919", "memo2": "" },
-			"PKM-0920": { "C_name": "烈腿蝗", "E_name": "Lokix", "memo": "全國編號0920", "secondary_id": "0920", "memo2": "" },
-			"PKM-0921": { "C_name": "布土撥", "E_name": "Pawmi", "memo": "全國編號0921", "secondary_id": "0921", "memo2": "" },
-			"PKM-0922": { "C_name": "布土撥", "E_name": "Pawmo", "memo": "全國編號0922", "secondary_id": "0922", "memo2": "" },
-			"PKM-0923": { "C_name": "巴布土撥", "E_name": "Pawmot", "memo": "全國編號0923", "secondary_id": "0923", "memo2": "" },
-			"PKM-0924": { "C_name": "一對鼠", "E_name": "Tandemaus", "memo": "全國編號0924", "secondary_id": "0924", "memo2": "" },
-			"PKM-0925": { "C_name": "一家鼠", "E_name": "Maushold", "memo": "全國編號0925", "secondary_id": "0925", "memo2": "" },
-			"PKM-0926": { "C_name": "狗仔包", "E_name": "Fidough", "memo": "全國編號0926", "secondary_id": "0926", "memo2": "" },
-			"PKM-0927": { "C_name": "麻糬犬", "E_name": "Dachsbun", "memo": "全國編號0927", "secondary_id": "0927", "memo2": "" },
-			"PKM-0928": { "C_name": "迷你芙", "E_name": "Smoliv", "memo": "全國編號0928", "secondary_id": "0928", "memo2": "" },
-			"PKM-0929": { "C_name": "奧利紐", "E_name": "Arboliva", "memo": "全國編號0929", "secondary_id": "0929", "memo2": "" },
-			"PKM-0930": { "C_name": "奧利瓦", "E_name": "Arboliva", "memo": "全國編號0930", "secondary_id": "0930", "memo2": "" },
-			"PKM-0931": { "C_name": "怒鸚哥", "E_name": "Squawkabilly", "memo": "全國編號0931", "secondary_id": "0931", "memo2": "" },
-			"PKM-0932": { "C_name": "鹽石寶", "E_name": "Nacli", "memo": "全國編號0932", "secondary_id": "0932", "memo2": "" },
-			"PKM-0933": { "C_name": "鹽石壘", "E_name": "Naclstack", "memo": "全國編號0933", "secondary_id": "0933", "memo2": "" },
-			"PKM-0934": { "C_name": "鹽石巨靈", "E_name": "Garganacl", "memo": "全國編號0934", "secondary_id": "0934", "memo2": "" },
-			"PKM-0935": { "C_name": "炭小侍", "E_name": "Charcadet", "memo": "全國編號0935", "secondary_id": "0935", "memo2": "" },
-			"PKM-0936": { "C_name": "紅蓮鎧騎", "E_name": "Armarouge", "memo": "全國編號0936", "secondary_id": "0936", "memo2": "" },
-			"PKM-0937": { "C_name": "蒼炎刃鬼", "E_name": "Ceruledge", "memo": "全國編號0937", "secondary_id": "0937", "memo2": "" },
-			"PKM-0938": { "C_name": "光蚪仔", "E_name": "Tadbulb", "memo": "全國編號0938", "secondary_id": "0938", "memo2": "" },
-			"PKM-0939": { "C_name": "電肚蛙", "E_name": "Bellibolt", "memo": "全國編號0939", "secondary_id": "0939", "memo2": "" },
-			"PKM-0940": { "C_name": "電海燕", "E_name": "Wattrel", "memo": "全國編號0940", "secondary_id": "0940", "memo2": "" },
-			"PKM-0941": { "C_name": "大電海燕", "E_name": "Kilowattrel", "memo": "全國編號0941", "secondary_id": "0941", "memo2": "" },
-			"PKM-0942": { "C_name": "偶鹿", "E_name": "Maschiff", "memo": "全國編號0942", "secondary_id": "0942", "memo2": "" },
-			"PKM-0943": { "C_name": "獒教父", "E_name": "Mabosstiff", "memo": "全國編號0943", "secondary_id": "0943", "memo2": "" },
-			"PKM-0944": { "C_name": "滋汁鼴", "E_name": "Shroodle", "memo": "全國編號0944", "secondary_id": "0944", "memo2": "" },
-			"PKM-0945": { "C_name": "塗標客", "E_name": "Grafaiai", "memo": "全國編號0945", "secondary_id": "0945", "memo2": "" },
-			"PKM-0946": { "C_name": "納噬草", "E_name": "Bramblin", "memo": "全國編號0946", "secondary_id": "0946", "memo2": "" },
-			"PKM-0947": { "C_name": "納噬草", "E_name": "Brambleghast", "memo": "全國編號0947", "secondary_id": "0947", "memo2": "" },
-			"PKM-0948": { "C_name": "原野水母", "E_name": "Toedscool", "memo": "全國編號0948", "secondary_id": "0948", "memo2": "" },
-			"PKM-0949": { "C_name": "陸地水母", "E_name": "Toedscruel", "memo": "全國編號0949", "secondary_id": "0949", "memo2": "" },
-			"PKM-0950": { "C_name": "毛崖蟹", "E_name": "Klawf", "memo": "全國編號0950", "secondary_id": "0950", "memo2": "" },
-			"PKM-0951": { "C_name": "熱辣娃", "E_name": "Capsakid", "memo": "全國編號0951", "secondary_id": "0951", "memo2": "" },
-			"PKM-0952": { "C_name": "狠辣椒", "E_name": "Scovillain", "memo": "全國編號0952", "secondary_id": "0952", "memo2": "" },
-			"PKM-0953": { "C_name": "蟲滾泥", "E_name": "Rellor", "memo": "全國編號0953", "secondary_id": "0953", "memo2": "" },
-			"PKM-0954": { "C_name": "蟲甲聖", "E_name": "Rabsca", "memo": "全國編號0954", "secondary_id": "0954", "memo2": "" },
-			"PKM-0955": { "C_name": "飄飄雛", "E_name": "Flittle", "memo": "全國編號0955", "secondary_id": "0955", "memo2": "" },
-			"PKM-0956": { "C_name": "超能艷鴕", "E_name": "Espathra", "memo": "全國編號0956", "secondary_id": "0956", "memo2": "" },
-			"PKM-0957": { "C_name": "小鍛匠", "E_name": "Tinkatink", "memo": "全國編號0957", "secondary_id": "0957", "memo2": "" },
-			"PKM-0958": { "C_name": "巧鍛匠", "E_name": "Tinkatuff", "memo": "全國編號0958", "secondary_id": "0958", "memo2": "" },
-			"PKM-0959": { "C_name": "巨鍛匠", "E_name": "Tinkaton", "memo": "全國編號0959", "secondary_id": "0959", "memo2": "" },
-			"PKM-0960": { "C_name": "海地鼠", "E_name": "Wiglett", "memo": "全國編號0960", "secondary_id": "0960", "memo2": "" },
-			"PKM-0961": { "C_name": "三地鼠", "E_name": "Wugtrio", "memo": "全國編號0961", "secondary_id": "0961", "memo2": "" },
-			"PKM-0962": { "C_name": "落落雀", "E_name": "Bombirdier", "memo": "全國編號0962", "secondary_id": "0962", "memo2": "" },
-			"PKM-0963": { "C_name": "波普海豚", "E_name": "Finizen", "memo": "全國編號0963", "secondary_id": "0963", "memo2": "" },
-			"PKM-0964": { "C_name": "海豚俠", "E_name": "Palafin", "memo": "全國編號0964", "secondary_id": "0964", "memo2": "" },
-			"PKM-0965": { "C_name": "噗隆隆", "E_name": "Varoom", "memo": "全國編號0965", "secondary_id": "0965", "memo2": "" },
-			"PKM-0966": { "C_name": "普隆隆姆", "E_name": "Revavroom", "memo": "全國編號0966", "secondary_id": "0966", "memo2": "" },
-			"PKM-0967": { "C_name": "摩托蜥", "E_name": "Cyclizar", "memo": "全國編號0967", "secondary_id": "0967", "memo2": "" },
-			"PKM-0968": { "C_name": "震腳", "E_name": "Orthworm", "memo": "全國編號0968", "secondary_id": "0968", "memo2": "" },
-			"PKM-0969": { "C_name": "晶光芽", "E_name": "Glimmet", "memo": "全國編號0969", "secondary_id": "0969", "memo2": "" },
-			"PKM-0970": { "C_name": "晶光花", "E_name": "Glimmora", "memo": "全國編號0970", "secondary_id": "0970", "memo2": "" },
-			"PKM-0971": { "C_name": "墓仔狗", "E_name": "Greavard", "memo": "全國編號0971", "secondary_id": "0971", "memo2": "" },
-			"PKM-0972": { "C_name": "墓揚犬", "E_name": "Houndstone", "memo": "全國編號0972", "secondary_id": "0972", "memo2": "" },
-			"PKM-0973": { "C_name": "下石鳥", "E_name": "Flamigo", "memo": "全國編號0973", "secondary_id": "0973", "memo2": "" },
-			"PKM-0974": { "C_name": "走鯨", "E_name": "Cetoddle", "memo": "全國編號0974", "secondary_id": "0974", "memo2": "" },
-			"PKM-0975": { "C_name": "浩大鯨", "E_name": "Cetitan", "memo": "全國編號0975", "secondary_id": "0975", "memo2": "" },
-			"PKM-0976": { "C_name": "輕身鱈", "E_name": "Veluza", "memo": "全國編號0976", "secondary_id": "0976", "memo2": "" },
-			"PKM-0977": { "C_name": "吃吼霸", "E_name": "Dondozo", "memo": "全國編號0977", "secondary_id": "0977", "memo2": "" },
-			"PKM-0978": { "C_name": "米立龍", "E_name": "Tatsugiri", "memo": "全國編號0978", "secondary_id": "0978", "memo2": "" },
-			"PKM-0979": { "C_name": "棄世猴", "E_name": "Annihilape", "memo": "全國編號0979", "secondary_id": "0979", "memo2": "" },
-			"PKM-0980": { "C_name": "土土蛇", "E_name": "Clodsire", "memo": "全國編號0980", "secondary_id": "0980", "memo2": "" },
-			"PKM-0981": { "C_name": "奇麒麟", "E_name": "Farigiraf", "memo": "全國編號0981", "secondary_id": "0981", "memo2": "" },
-			"PKM-0982": { "C_name": "土龍節節", "E_name": "Dudunsparce", "memo": "全國編號0982", "secondary_id": "0982", "memo2": "" },
-			"PKM-0983": { "C_name": "僕斬將軍", "E_name": "Kingambit", "memo": "全國編號0983", "secondary_id": "0983", "memo2": "" },
-			"PKM-0984": { "C_name": "雄偉牙", "E_name": "Great Tusk", "memo": "全國編號0984", "secondary_id": "0984", "memo2": "" },
-			"PKM-0985": { "C_name": "吼叫尾", "E_name": "Scream Tail", "memo": "全國編號0985", "secondary_id": "0985", "memo2": "" },
-			"PKM-0986": { "C_name": "猛惡菇", "E_name": "Brute Bonnet", "memo": "全國編號0986", "secondary_id": "0986", "memo2": "" },
-			"PKM-0987": { "C_name": "振翼髮", "E_name": "Flutter Mane", "memo": "全國編號0987", "secondary_id": "0987", "memo2": "" },
-			"PKM-0988": { "C_name": "爬地翅", "E_name": "Slither Wing", "memo": "全國編號0988", "secondary_id": "0988", "memo2": "" },
-			"PKM-0989": { "C_name": "沙鐵皮", "E_name": "Sandy Shocks", "memo": "全國編號0989", "secondary_id": "0989", "memo2": "" },
-			"PKM-0990": { "C_name": "鐵轍跡", "E_name": "Iron Treads", "memo": "全國編號0990", "secondary_id": "0990", "memo2": "" },
-			"PKM-0991": { "C_name": "鐵包袱", "E_name": "Iron Bundle", "memo": "全國編號0991", "secondary_id": "0991", "memo2": "" },
-			"PKM-0992": { "C_name": "鐵臂膀", "E_name": "Iron Hands", "memo": "全國編號0992", "secondary_id": "0992", "memo2": "" },
-			"PKM-0993": { "C_name": "鐵脖子", "E_name": "Iron Jugulis", "memo": "全國編號0993", "secondary_id": "0993", "memo2": "" },
-			"PKM-0994": { "C_name": "鐵毒蛾", "E_name": "Iron Moth", "memo": "全國編號0994", "secondary_id": "0994", "memo2": "" },
-			"PKM-0995": { "C_name": "鐵荊棘", "E_name": "Iron Thorns", "memo": "全國編號0995", "secondary_id": "0995", "memo2": "" },
-			"PKM-0996": { "C_name": "涼脊龍", "E_name": "Frigibax", "memo": "全國編號0996", "secondary_id": "0996", "memo2": "" },
-			"PKM-0997": { "C_name": "凍脊龍", "E_name": "Arctibax", "memo": "全國編號0997", "secondary_id": "0997", "memo2": "" },
-			"PKM-0998": { "C_name": "戟脊龍", "E_name": "Baxcalibur", "memo": "全國編號0998", "secondary_id": "0998", "memo2": "" },
-			"PKM-0999": { "C_name": "索財靈", "E_name": "Gimmighoul", "memo": "全國編號0999", "secondary_id": "0999", "memo2": "" },
-			"PKM-1000": { "C_name": "賽富豪", "E_name": "Gholdengo", "memo": "全國編號1000", "secondary_id": "1000", "memo2": "" },
-			"PKM-1001": { "C_name": "古簡蝸", "E_name": "Wo-Chien", "memo": "全國編號1001", "secondary_id": "1001", "memo2": "" },
-			"PKM-1002": { "C_name": "古玉魚", "E_name": "Chi-Yu", "memo": "全國編號1002", "secondary_id": "1002", "memo2": "" },
-			"PKM-1003": { "C_name": "古鼎鹿", "E_name": "Ting-Lu", "memo": "全國編號1003", "secondary_id": "1003", "memo2": "" },
-			"PKM-1004": { "C_name": "古劍豹", "E_name": "Chien-Pao", "memo": "全國編號1004", "secondary_id": "1004", "memo2": "" },
-			"PKM-1005": { "C_name": "轟鳴月", "E_name": "Roaring Moon", "memo": "全國編號1005", "secondary_id": "1005", "memo2": "" },
-			"PKM-1006": { "C_name": "鐵武者", "E_name": "Iron Valiant", "memo": "全國編號1006", "secondary_id": "1006", "memo2": "" },
-			"PKM-1007": { "C_name": "故勒頓", "E_name": "Koraidon", "memo": "全國編號1007", "secondary_id": "1007", "memo2": "" },
-			"PKM-1008": { "C_name": "密勒頓", "E_name": "Miraidon", "memo": "全國編號1008", "secondary_id": "1008", "memo2": "" },
-			"PKM-1009": { "C_name": "波盪水", "E_name": "Walking Wake", "memo": "全國編號1009", "secondary_id": "1009", "memo2": "" },
-			"PKM-1010": { "C_name": "鐵斑葉", "E_name": "Iron Leaves", "memo": "全國編號1010", "secondary_id": "1010", "memo2": "" },
-			"PKM-1011": { "C_name": "裹蜜蟲", "E_name": "Dipplin", "memo": "全國編號1011", "secondary_id": "1011", "memo2": "" },
-			"PKM-1012": { "C_name": "斯契毒", "E_name": "Poltchageist", "memo": "全國編號1012", "secondary_id": "1012", "memo2": "" },
-			"PKM-1013": { "C_name": "來悲茶", "E_name": "Sinistcha", "memo": "全國編號1013", "secondary_id": "1013", "memo2": "" },
-			"PKM-1014": { "C_name": "夠讚狗", "E_name": "Okidogi", "memo": "全國編號1014", "secondary_id": "1014", "memo2": "" },
-			"PKM-1015": { "C_name": "願增猿", "E_name": "Munkidori", "memo": "全國編號1015", "secondary_id": "1015", "memo2": "" },
-			"PKM-1016": { "C_name": "吉雉雞", "E_name": "Fezandipiti", "memo": "全國編號1016", "secondary_id": "1016", "memo2": "" },
-			"PKM-1017": { "C_name": "厄鬼閂", "E_name": "Ogerpon", "memo": "全國編號1017", "secondary_id": "1017", "memo2": "" },
-			"PKM-1018": { "C_name": "橋龍", "E_name": "Archaludon", "memo": "全國編號1018", "secondary_id": "1018", "memo2": "" },
-			"PKM-1019": { "C_name": "九月紅", "E_name": "Hydrapple", "memo": "全國編號1019", "secondary_id": "1019", "memo2": "" },
-			"PKM-1020": { "C_name": "猛雷鼓", "E_name": "Gouging Fire", "memo": "全國編號1020", "secondary_id": "1020", "memo2": "" },
-			"PKM-1021": { "C_name": "破空焰", "E_name": "Raging Bolt", "memo": "全國編號1021", "secondary_id": "1021", "memo2": "" },
-			"PKM-1022": { "C_name": "鐵頭殼", "E_name": "Iron Crown", "memo": "全國編號1022", "secondary_id": "1022", "memo2": "" },
-			"PKM-1023": { "C_name": "鐵鋼龍", "E_name": "Iron Boulder", "memo": "全國編號1023", "secondary_id": "1023", "memo2": "" },
-			"PKM-1024": { "C_name": "太樂巴戈斯", "E_name": "Terapagos", "memo": "全國編號1024", "secondary_id": "1024", "memo2": "" },
-			"PKM-1025": { "C_name": "桃歹郎", "E_name": "Pecharunt", "memo": "全國編號1025", "secondary_id": "1025", "memo2": "" }
-		};
+        let html5QrCode;
+        const modal = document.getElementById('result-modal');
+        const markdownDiv = document.getElementById('markdown-content');
+        const rawTextarea = document.getElementById('raw-markdown');
+        const errorMsg = document.getElementById('error-msg');
+        const cameraContainer = document.getElementById('camera-selection-grp');
+        const scrollArea = document.getElementById('scroll-area');
 
-        const statTranslations = {
-            "hp": "體力 (HP)", "attack": "攻擊 (Attack)", "defense": "防禦 (Defense)",
-            "special-attack": "特攻 (Special Attack)", "special-defense": "特防 (Special Defense)", "speed": "速度 (Speed)"
-        };
-
-        const typeTranslations = {
-            "normal": "一般", "fire": "火", "water": "水", "grass": "草", "electric": "電", "ice": "冰",
-            "fighting": "格鬥", "poison": "毒", "ground": "地面", "flying": "飛行", "psychic": "超能力",
-            "bug": "蟲", "rock": "岩石", "ghost": "幽靈", "dragon": "龍", "dark": "惡", "steel": "鋼", "fairy": "妖精"
-        };
-
-let html5QrCode;
-const modal = document.getElementById('result-modal');
-const markdownDiv = document.getElementById('markdown-content');
-const rawTextarea = document.getElementById('raw-markdown');
-const errorMsg = document.getElementById('error-msg');
-// 新增：取得相機清單容器
-const cameraContainer = document.getElementById('camera-selection-grp');
-
-window.addEventListener('load', () => {
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-        document.getElementById('https-warning').classList.remove('hidden');
-    }
-    html5QrCode = new Html5Qrcode("reader");
-    
-    // 頁面載入後自動偵測相機並生成按鈕
-    detectAndCreateCameraButtons();
-});
-
-// 新增：偵測相機並生成按鈕的函數
-async function detectAndCreateCameraButtons() {
-    try {
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 0) {
-            cameraContainer.innerHTML = ''; // 清空
-            devices.forEach((camera, index) => {
-                const btn = document.createElement('button');
-                // 顯示相機名稱，如果沒名稱就顯示 Camera 1, 2...
-                btn.innerText = camera.label || `相機 ${index + 1}`;
-                
-                // 設定與主畫面風格一致的樣式
-                btn.className = "w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 rounded-xl transition-all text-sm active:scale-95";
-                
-                // 點擊後啟動指定相機
-                btn.onclick = () => startScanning(camera.id);
-                
-                cameraContainer.appendChild(btn);
-            });
-        }
-    } catch (err) {
-        console.error("無法取得相機清單", err);
-    }
-}
-
-// 修改後的啟動函數 (支援傳入 cameraId)
-async function startScanning(cameraId = null) {
-    hideError();
-    document.getElementById('placeholder-ui').classList.add('hidden');
-    document.getElementById('start-btn').classList.add('hidden');
-    cameraContainer.classList.add('hidden'); // 啟動後隱藏列表
-    document.getElementById('stop-btn').classList.remove('hidden');
-
-    // 如果有指定 ID 就用 ID，否則預設用環境鏡頭
-    const config = cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" };
-
-    try {
-        await html5QrCode.start(
-            config, 
-            { fps: 15, qrbox: { width: 250, height: 250 }}, 
-            onScanSuccess
-        );
-        
-        // --- 嘗試自動設定 2 倍焦距 (如果該鏡頭支援) ---
-        const videoTrack = html5QrCode.getRunningTrack();
-        const capabilities = videoTrack.getCapabilities();
-        if (capabilities.zoom) {
-            videoTrack.applyConstraints({
-                advanced: [{ zoom: 2.0 }]
-            }).catch(e => console.warn("此鏡頭不支援縮放設定"));
-        }
-        
-    } catch (err) {
-        showError("無法啟動相機。");
-        stopScanning();
-    }
-}
-
-// 修改停止函數，讓列表重新出現
-function stopScanning() {
-    if (html5QrCode) {
-        html5QrCode.stop().then(() => {
-            document.getElementById('start-btn').classList.remove('hidden');
-            cameraContainer.classList.remove('hidden'); // 顯示列表
-            document.getElementById('stop-btn').classList.add('hidden');
-            document.getElementById('placeholder-ui').classList.remove('hidden');
-        }).catch(() => {
-            // 防止重複停止報錯
+        // 初始化與偵測
+        window.addEventListener('load', () => {
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                document.getElementById('https-warning').classList.remove('hidden');
+            }
+            
+            // 預先實例化，但先不啟動
+            html5QrCode = new Html5Qrcode("reader");
+            
+            // 嘗試偵測相機
+            detectCameras();
         });
-    }
-}
 
-
-
-
-
+        async function detectCameras() {
             try {
-                const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${formatPokemonName(localData.E_name)}`);
-                if (!response.ok) throw new Error("API 請求失敗");
-                
-                const apiData = await response.json();
-                generateMarkdown(localData, apiData);
-                openModal();
+                const devices = await Html5Qrcode.getCameras();
+                if (devices && devices.length > 0) {
+                    cameraContainer.innerHTML = '';
+                    devices.forEach((camera, index) => {
+                        const btn = document.createElement('button');
+                        btn.innerText = camera.label || `相機 ${index + 1}`;
+                        btn.className = "w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-3 rounded-xl transition-all text-sm border border-slate-200";
+                        btn.onclick = () => startScanning(camera.id);
+                        cameraContainer.appendChild(btn);
+                    });
+                }
             } catch (err) {
-                showError(`連線失敗: ${err.message}`);
+                console.warn("無法取得相機清單:", err);
             }
         }
 
-        function generateMarkdown(local, api) {
-            const types = api.types.map(t => typeTranslations[t.type.name] || t.type.name).join(' / ');
-            const imageUrl = api.sprites.other['official-artwork'].front_default || api.sprites.front_default;
-            const abilities = api.abilities.map(a => `- ${a.ability.name}${a.is_hidden ? ' (隱藏特性)' : ''}`).join('\n');
-            const items = api.held_items.length > 0 ? api.held_items.map(i => `- ${i.item.name}`).join('\n') : "無持有物品";
-            const moves = api.moves.slice(0, 10).map(m => `\`${m.move.name}\``).join(' ');
-            const cryAudioUrl = api.cries ? api.cries.latest : null;
-            const crySection = cryAudioUrl ? `### 🔊 叫聲 (Cries)\n<audio controls src="${cryAudioUrl}"></audio>` : "";
+        async function startScanning(cameraId = null) {
+            hideError();
+            
+            // 如果正在掃描，先停止
+            if (html5QrCode.isScanning) {
+                await html5QrCode.stop();
+            }
 
+            document.getElementById('placeholder-ui').classList.add('hidden');
+            document.getElementById('start-btn').classList.add('hidden');
+            cameraContainer.classList.add('hidden');
+            document.getElementById('stop-btn').classList.remove('hidden');
+
+            const config = cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" };
+
+            try {
+                await html5QrCode.start(
+                    config, 
+                    { fps: 15, qrbox: { width: 250, height: 250 }}, 
+                    onScanSuccess
+                );
+                
+                // 嘗試 2 倍變焦
+                const videoTrack = html5QrCode.getRunningTrack();
+                const caps = videoTrack.getCapabilities();
+                if (caps.zoom) {
+                    videoTrack.applyConstraints({ advanced: [{ zoom: 2.0 }] }).catch(e => {});
+                }
+            } catch (err) {
+                showError("相機啟動失敗：" + err);
+                stopScanning();
+            }
+        }
+
+        function stopScanning() {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    document.getElementById('start-btn').classList.remove('hidden');
+                    cameraContainer.classList.remove('hidden');
+                    document.getElementById('stop-btn').classList.add('hidden');
+                    document.getElementById('placeholder-ui').classList.remove('hidden');
+                }).catch(() => {});
+            }
+        }
+
+        function onScanSuccess(decodedText) {
+            console.log("Scan Result:", decodedText);
+            
+            // 簡單檢查是否為 Pokemon Rev 代碼 (格式範例: rev_pk_001)
+            if (decodedText.startsWith('rev_pk_')) {
+                // 停止掃描避免重複讀取
+                stopScanning();
+                fetchPokemonData(decodedText);
+            } else {
+                showError("這不是有效的 Pokemon Rev 遊戲卡代碼。");
+            }
+        }
+
+        async function fetchPokemonData(code) {
+            try {
+                const id = code.replace('rev_pk_', '');
+                const response = await fetch(`https://raw.githubusercontent.com/riddleling/pokedata/main/data/${id}.json`);
+                if (!response.ok) throw new Error('找不到卡片資料');
+                const data = await response.json();
+                
+                const apiRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${data.secondary_id}`);
+                const apiData = await apiRes.json();
+                
+                renderMarkdown(data, apiData);
+                openModal();
+            } catch (err) {
+                showError("資料抓取失敗：" + err.message);
+                document.getElementById('start-btn').classList.remove('hidden');
+                cameraContainer.classList.remove('hidden');
+            }
+        }
+
+        function renderMarkdown(local, api) {
+            const types = api.types.map(t => `\`${t.type.name.toUpperCase()}\``).join(' ');
+            const abilities = api.abilities.map(a => `- ${a.ability.name}`).join('\n');
+            const imageUrl = api.sprites.other['official-artwork'].front_default;
+            
             const md = `
-# ${local.C_name}
-(${local.E_name.toUpperCase()})
+# ${local.C_name} (${local.E_name})
 ---
 ![${local.C_name}](${imageUrl})
 
@@ -1292,21 +204,12 @@ function stopScanning() {
 ### 📝 備註
 > ${local.memo}
 
-${crySection}
-
-### 🌟 特性 (Abilities)
+### 🌟 特性
 ${abilities}
 
-### 🎒 持有物品 (Held Items)
-${items}
-
-### 📊 基礎數值 (Stats)
-${api.stats.map(s => `- **${statTranslations[s.stat.name] || s.stat.name}**: ${s.base_stat}`).join('\n')}
-
-### ⚔️ 部分招式 (Moves)
-${moves} ${api.moves.length > 10 ? '...' : ''}
+### 📊 基礎數值
+${api.stats.map(s => `- **${s.stat.name}**: ${s.base_stat}`).join('\n')}
             `;
-
             rawTextarea.value = md.trim();
             markdownDiv.innerHTML = marked.parse(md);
         }
@@ -1314,16 +217,14 @@ ${moves} ${api.moves.length > 10 ? '...' : ''}
         function openModal() {
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            document.body.style.overflow = 'hidden'; // 禁止底層滾動
-            // 需求 1: 開啟跳窗時將捲軸移至頂端
+            document.body.style.overflow = 'hidden';
             if (scrollArea) scrollArea.scrollTop = 0;
         }
 
         function closeModal() {
             modal.classList.add('hidden');
             modal.classList.remove('flex');
-            document.body.style.overflow = ''; // 恢復滾動
-            document.getElementById('manual-id').value = '';
+            document.body.style.overflow = '';
         }
 
         function showError(msg) {
@@ -1335,8 +236,6 @@ ${moves} ${api.moves.length > 10 ? '...' : ''}
         function hideError() {
             errorMsg.classList.add('hidden');
         }
-		
-		
     </script>
 </body>
 </html>
