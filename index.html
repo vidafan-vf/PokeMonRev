@@ -58,17 +58,17 @@
         </div>
 
         <!-- 操作按鈕 -->
-        <div class="flex flex-col gap-3">
-            <button id="start-btn" onclick="startScanning()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-200 active:scale-95">
-                開始掃描遊戲卡
-            </button>
-			
-			<div id="camera-selection-grp" class="flex flex-col gap-2"></div>
-			
-            <button id="stop-btn" onclick="stopScanning()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl transition-all">
-                停止相機
-            </button>
-        </div>
+<div class="flex flex-col gap-3">
+    <button id="start-btn" onclick="startScanning()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-200 active:scale-95">
+        開始掃描遊戲卡
+    </button>
+
+    <div id="camera-selection-grp" class="flex flex-col gap-2"></div>
+
+    <button id="stop-btn" onclick="stopScanning()" class="hidden w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-4 rounded-2xl transition-all">
+        停止相機
+    </button>
+</div>
 
         <!-- 手動輸入區域 -->
         <div class="border-t border-slate-100 pt-4">
@@ -1162,159 +1162,95 @@
             "bug": "蟲", "rock": "岩石", "ghost": "幽靈", "dragon": "龍", "dark": "惡", "steel": "鋼", "fairy": "妖精"
         };
 
-        let html5QrCode;
-        const modal = document.getElementById('result-modal');
-        const markdownDiv = document.getElementById('markdown-content');
-        const rawTextarea = document.getElementById('raw-markdown');
-        const errorMsg = document.getElementById('error-msg');
-
-        window.addEventListener('load', () => {
-            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                document.getElementById('https-warning').classList.remove('hidden');
-            }
-            html5QrCode = new Html5Qrcode("reader");
-        });
-
-
-        function onScanSuccess(decodedText) {
-            const scannedId = decodedText.trim();
-            const debugDisplay = document.getElementById('debug-raw-string');
-            if (debugDisplay) debugDisplay.innerText = scannedId;
-
-            const foundKey = Object.keys(mappingTable).find(key => 
-                mappingTable[key].memo2 === scannedId
-            );
-
-            if (foundKey) {
-                lookupPokemon(foundKey);
-            } else {
-                showError(`查無此 ID: ${scannedId}`);
-            }
-            stopScanning();
-        }
-
-        function handleManualInput() {
-            const inputVal = document.getElementById('manual-id').value.trim().toLowerCase();
-            if (!inputVal) return;
-
-            const foundKey = Object.keys(mappingTable).find(key => 
-                mappingTable[key].C_name === inputVal || 
-                mappingTable[key].E_name.toLowerCase() === inputVal
-            );
-
-            if (foundKey) {
-                lookupPokemon(foundKey);
-            } else {
-                showError(`找不到寶可夢: ${inputVal}`);
-            }
-        }
-
-		function formatPokemonName(name) {
-		    return name.toLowerCase()
-		        .replace('♀', '-f')
-		        .replace('♂', '-m')
-		        .replace(/\s+/g, '-')      // 空格轉連字號
-		        .replace(/[^a-z0-9-]/g, ''); // 刪除點、單引號等特殊字元
-		}
-		
-        async function lookupPokemon(key) {
-            hideError();
-            const localData = mappingTable[key];
-			
-
-
-
-
 let html5QrCode;
+const modal = document.getElementById('result-modal');
+const markdownDiv = document.getElementById('markdown-content');
+const rawTextarea = document.getElementById('raw-markdown');
+const errorMsg = document.getElementById('error-msg');
+// 新增：取得相機清單容器
 const cameraContainer = document.getElementById('camera-selection-grp');
 
-// 頁面載入後自動偵測相機
-window.addEventListener('DOMContentLoaded', (event) => {
-    detectCameras();
+window.addEventListener('load', () => {
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        document.getElementById('https-warning').classList.remove('hidden');
+    }
+    html5QrCode = new Html5Qrcode("reader");
+    
+    // 頁面載入後自動偵測相機並生成按鈕
+    detectAndCreateCameraButtons();
 });
 
-async function detectCameras() {
+// 新增：偵測相機並生成按鈕的函數
+async function detectAndCreateCameraButtons() {
     try {
         const devices = await Html5Qrcode.getCameras();
         if (devices && devices.length > 0) {
-            // 清空容器
-            cameraContainer.innerHTML = '';
-            
-            // 針對每一顆鏡頭生成按鈕
+            cameraContainer.innerHTML = ''; // 清空
             devices.forEach((camera, index) => {
                 const btn = document.createElement('button');
-                // 使用鏡頭名稱，若無名稱則顯示 Camera 1, 2...
-                btn.innerText = camera.label || `Camera ${index + 1}`;
+                // 顯示相機名稱，如果沒名稱就顯示 Camera 1, 2...
+                btn.innerText = camera.label || `相機 ${index + 1}`;
                 
-                // 設定 Tailwind 樣式 (樣式與原按鈕接近但顏色稍淺做區隔)
+                // 設定與主畫面風格一致的樣式
                 btn.className = "w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 rounded-xl transition-all text-sm active:scale-95";
                 
-                // 點擊事件：啟動特定相機
-                btn.onclick = () => startScanningWithId(camera.id);
+                // 點擊後啟動指定相機
+                btn.onclick = () => startScanning(camera.id);
                 
                 cameraContainer.appendChild(btn);
             });
         }
     } catch (err) {
-        console.error("無法取得相機列表", err);
+        console.error("無法取得相機清單", err);
     }
 }
 
-// 核心掃描功能 (支援指定 cameraId)
-function startScanningWithId(cameraId = null) {
-    if (html5QrCode && html5QrCode.isScanning) {
-        html5QrCode.stop().then(() => {
-            proceedStart(cameraId);
-        });
-    } else {
-        proceedStart(cameraId);
+// 修改後的啟動函數 (支援傳入 cameraId)
+async function startScanning(cameraId = null) {
+    hideError();
+    document.getElementById('placeholder-ui').classList.add('hidden');
+    document.getElementById('start-btn').classList.add('hidden');
+    cameraContainer.classList.add('hidden'); // 啟動後隱藏列表
+    document.getElementById('stop-btn').classList.remove('hidden');
+
+    // 如果有指定 ID 就用 ID，否則預設用環境鏡頭
+    const config = cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" };
+
+    try {
+        await html5QrCode.start(
+            config, 
+            { fps: 15, qrbox: { width: 250, height: 250 }}, 
+            onScanSuccess
+        );
+        
+        // --- 嘗試自動設定 2 倍焦距 (如果該鏡頭支援) ---
+        const videoTrack = html5QrCode.getRunningTrack();
+        const capabilities = videoTrack.getCapabilities();
+        if (capabilities.zoom) {
+            videoTrack.applyConstraints({
+                advanced: [{ zoom: 2.0 }]
+            }).catch(e => console.warn("此鏡頭不支援縮放設定"));
+        }
+        
+    } catch (err) {
+        showError("無法啟動相機。");
+        stopScanning();
     }
 }
 
-function proceedStart(cameraId) {
-    const config = { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0
-    };
-
-    html5QrCode = new Html5Qrcode("reader");
-    
-    // 如果有指定 ID 就用 ID，否則用預設環境鏡頭
-    const cameraConfig = cameraId ? { deviceId: { exact: cameraId } } : { facingMode: "environment" };
-
-    html5QrCode.start(
-        cameraConfig, 
-        config, 
-        onScanSuccess
-    ).then(() => {
-        document.getElementById('placeholder-ui').classList.add('hidden');
-        document.getElementById('start-btn').classList.add('hidden');
-        // 啟動後也隱藏相機列表
-        cameraContainer.classList.add('hidden'); 
-        document.getElementById('stop-btn').classList.remove('hidden');
-    }).catch(err => {
-        showError("無法啟動該相機，請檢查權限。");
-    });
-}
-
-// 修改原本的 startScanning 呼叫
-function startScanning() {
-    startScanningWithId(null);
-}
-
-// 修改停止相機功能，讓按紐重新出現
+// 修改停止函數，讓列表重新出現
 function stopScanning() {
     if (html5QrCode) {
         html5QrCode.stop().then(() => {
             document.getElementById('start-btn').classList.remove('hidden');
-            cameraContainer.classList.remove('hidden'); // 重新顯示相機列表
+            cameraContainer.classList.remove('hidden'); // 顯示列表
             document.getElementById('stop-btn').classList.add('hidden');
             document.getElementById('placeholder-ui').classList.remove('hidden');
+        }).catch(() => {
+            // 防止重複停止報錯
         });
     }
 }
-
 
 
 
