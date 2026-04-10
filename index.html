@@ -1173,22 +1173,38 @@
         });
 
         async function startScanning() {
-            hideError();
-            document.getElementById('placeholder-ui').classList.add('hidden');
-            document.getElementById('start-btn').classList.add('hidden');
-            document.getElementById('stop-btn').classList.remove('hidden');
+Html5Qrcode.getCameras().then(devices => {
+    if (devices && devices.length > 0) {
+        showError("偵測到的鏡頭清單：", devices);
+        
+        // 策略：通常主鏡頭會是最後一個，或是你可以做個切換鈕讓使用者選
+        // 先試試看清單中的最後一顆 (通常是後置主鏡頭)
+        const selectedCameraId = devices[devices.length - 1].id;
 
-            try {
-                await html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    { fps: 15, qrbox: { width: 250, height: 250 }, videoConstraints: { width: { ideal: 1080 }, height: { ideal: 1080 }, facingMode: "environment", advanced: [ { zoom: 2.0 }, { focusMode: "continuous" }]} }, 
-                    onScanSuccess
-                );
-            } catch (err) {
-                showError("無法啟動相機。");
-                stopScanning();
-            }
-        }
+        // 2. 使用 cameraId 啟動，取代原本的 { facingMode: "environment" }
+        html5QrCode.start(
+            selectedCameraId, 
+            { 
+                fps: 15, 
+                qrbox: { width: 250, height: 250 }, 
+                videoConstraints: { 
+                    width: { ideal: 1280 }, 
+                    height: { ideal: 720 },
+                    // 這裡可以保留 focusMode 嘗試強制對焦
+                    advanced: [{ focusMode: "continuous" }]
+                } 
+            }, 
+            onScanSuccess
+        ).catch(err => {
+            showError("啟動特定鏡頭失敗：", err);
+        });
+    } else {
+        showError("找不到任何鏡頭");
+    }
+}).catch(err => {
+    showError("無法取得鏡頭清單：", err);
+});
+		}
 
         async function stopScanning() {
             if (html5QrCode && html5QrCode.isScanning) {
