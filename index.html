@@ -1183,7 +1183,7 @@
 			    
 			    if (devices && devices.length > 0) {
 			        // 優先選擇第二個鏡頭 (index 1)，若只有一個鏡頭則選第一個 (index 0)
-			        let selectedCameraId = devices.length > 2 ? devices[1].id : devices[0].id;
+			        let selectedCameraId = devices.length > 1 ? devices[0].id : devices[1].id;
 					
 			        const config = { 
 			            fps: 15, 
