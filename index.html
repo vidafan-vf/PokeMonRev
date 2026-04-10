@@ -1180,52 +1180,25 @@
 
 			try {
 			    const devices = await Html5Qrcode.getCameras();
-			    if (!devices || devices.length === 0) throw new Error("找不到任何鏡頭");
+			    
+			    // 將鏡頭清單轉換為詳細文字資訊
+			    let debugInfo = devices.map((d, i) => 
+			        `[${i}] ID: ${d.id.substring(0, 5)}... | Label: ${d.label}`
+			    ).join("\n");
 			
-			    // 1. 建立後置鏡頭的嘗試順序（從最後一顆開始試）
-			    // 我們同時存下原始 index，方便後續顯示
-			    const tryOrder = devices
-			        .map((device, index) => ({ device, index }))
-			        .filter(item => !item.device.label.toLowerCase().includes("front"))
-			        .reverse();
+			    // 直接在網頁上顯示清單資訊
+			    showError("偵測到鏡頭清單：\n" + debugInfo);
 			
-			    const config = { 
-			        fps: 20, 
-			        qrbox: { width: 250, height: 250 }, 
-			        videoConstraints: { 
-			            width: { ideal: 1280 }, 
-			            height: { ideal: 720 },
-			            facingMode: "environment", 
-			            advanced: [{ focusMode: "continuous" }]
-			        } 
-			    };
-			
-			    let started = false;
-			    for (const item of tryOrder) {
-			        try {
-			            await html5QrCode.start(item.device.id, config, onScanSuccess);
-			            
-			            // 成功啟動！顯示該鏡頭資訊
-			            const label = item.device.label || "未知名稱";
-			            showError(`成功啟動鏡頭 [Index ${item.index}]: ${label}`);
-			            
-			            started = true;
-			            break; 
-			        } catch (e) {
-			            console.warn(`鏡頭 Index ${item.index} 啟動失敗，嘗試下一顆...`);
-			        }
-			    }
-			
-			    if (!started) {
-			        // 最後保險：使用系統預設
-			        await html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-			        showError("使用系統預設鏡頭 (FacingMode)");
-			    }
-			
+			    // 依然嘗試用原本的方式啟動，以便你對照
+			    await html5QrCode.start(
+			        { facingMode: "environment" }, 
+			        { fps: 15, qrbox: { width: 250, height: 250 } }, 
+			        onScanSuccess
+			    );
 			} catch (err) {
-			    showError("無法啟動相機: " + err.message);
+			    showError("發生錯誤: " + err);
+			    stopScanning();
 			}
-
 			
 		}
 
