@@ -1180,49 +1180,50 @@
 
 			try {
 			    const devices = await Html5Qrcode.getCameras();
-			    
-			    if (devices && devices.length > 0) {
-			        // 優先選擇第二個鏡頭 (index 1)，若只有一個鏡頭則選第一個 (index 0)
-			        let selectedCameraId = devices.length > 1 ? devices[0].id : devices[1].id;
-					
-			        const config = { 
-			            fps: 15, 
-			            qrbox: { width: 250, height: 250 }, 
-			            videoConstraints: { 
-			                width: { ideal: 1080 }, 
-			                height: { ideal: 1080 },
-			                // 當使用 cameraId 時，facingMode 有時會被忽略，但建議保留在 constraints 中
-			                facingMode: "environment", 
-			                advanced: [ 
-			                    { zoom: 2.0 }, 
-			                    { focusMode: "continuous" }
-			                ]
-			            } 
-			        };
+			    if (!devices || devices.length === 0) throw new Error("找不到任何鏡頭");
 			
+			    // 1. 建立後置鏡頭的嘗試順序（從最後一顆開始試）
+			    // 我們同時存下原始 index，方便後續顯示
+			    const tryOrder = devices
+			        .map((device, index) => ({ device, index }))
+			        .filter(item => !item.device.label.toLowerCase().includes("front"))
+			        .reverse();
+			
+			    const config = { 
+			        fps: 20, 
+			        qrbox: { width: 250, height: 250 }, 
+			        videoConstraints: { 
+			            width: { ideal: 1280 }, 
+			            height: { ideal: 720 },
+			            facingMode: "environment", 
+			            advanced: [{ focusMode: "continuous" }]
+			        } 
+			    };
+			
+			    let started = false;
+			    for (const item of tryOrder) {
 			        try {
-			            // 嘗試啟動選定的鏡頭
-			            await html5QrCode.start(selectedCameraId, config, onScanSuccess);
-						showError(`嘗試啟動選定的鏡頭: ${selectedCameraId}`);
-			        } catch (firstErr) {
-			            console.warn("第二個鏡頭啟動失敗，嘗試第一個鏡頭...", firstErr);
-						showError("第二個鏡頭啟動失敗，嘗試第一個鏡頭...");
-			            // 如果第二個失敗且有兩個以上的鏡頭，嘗試第一個
-			            if (devices.length > 1 && selectedCameraId !== devices[0].id) {
-			                await html5QrCode.start(devices[0].id, config, onScanSuccess);
-			            } else {
-			                showError("只有一個鏡頭或第一個也失敗，拋出錯誤");
-							throw firstErr; // 只有一個鏡頭或第一個也失敗，拋出錯誤
-							
-			            }
+			            await html5QrCode.start(item.device.id, config, onScanSuccess);
+			            
+			            // 成功啟動！顯示該鏡頭資訊
+			            const label = item.device.label || "未知名稱";
+			            showError(`成功啟動鏡頭 [Index ${item.index}]: ${label}`);
+			            
+			            started = true;
+			            break; 
+			        } catch (e) {
+			            console.warn(`鏡頭 Index ${item.index} 啟動失敗，嘗試下一顆...`);
 			        }
-			    } else {
-			        throw new Error("找不到任何鏡頭");
 			    }
+			
+			    if (!started) {
+			        // 最後保險：使用系統預設
+			        await html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+			        showError("使用系統預設鏡頭 (FacingMode)");
+			    }
+			
 			} catch (err) {
-			    console.error("相機啟動最終失敗:", err);
-			    showError("無法啟動相機。");
-			    stopScanning();
+			    showError("無法啟動相機: " + err.message);
 			}
 
 			
